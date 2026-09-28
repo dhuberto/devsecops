@@ -2,17 +2,7 @@
 
 Esta é a aplicação de laboratório usada em **todos os encontros práticos** da
 disciplina. É um gerenciador de tarefas (to-do list) simples em Python/Flask,
-propositalmente vulnerável, que evolui ao longo do curso:
-
-- Módulos 1–2: usada para discutir arquitetura, pipeline e hardening.
-- Módulo 3: alvo de SAST (Semgrep) e SCA (pip-audit / Trivy) — os alunos
-  encontram SQLi, XSS, segredo hardcoded e dependências vulneráveis.
-- Módulo 4: alvo de DAST (OWASP ZAP) rodando contra a aplicação em execução.
-- Módulo 5: containerizada com Docker e provisionada via Docker Compose,
-  usada para praticar scanning de IaC.
-- Módulo 6: instrumentada com logging estruturado para observabilidade.
-- Módulo 7: base do projeto final — os alunos entregam a versão corrigida
-  com a esteira DevSecOps completa.
+propositalmente vulnerável, que evolui ao longo do curso
 
 ## ⚠️ Aviso importante
 

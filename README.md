@@ -23,6 +23,7 @@ sudo apt install python3-venv
 python3 -m venv .venv
 source .venv/bin/activate #Linux    &     # Windows: venv\Scripts\activate
 sudo apt install python3-pip
+python -m pip install --upgrade flask
 pip install -r requirements.txt
 python app.py
 ```

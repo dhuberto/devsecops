@@ -17,7 +17,8 @@ Este código contém vulnerabilidades **intencionais** para fins didáticos
 ## Como executar localmente
 
 ```bash
-cd app-exemplo
+git clone https://github.com/dhuberto/devsecops.git
+cd devsecops
 python3 -m venv .venv
 source .venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt

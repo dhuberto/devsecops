@@ -1,4 +1,4 @@
-# TaskFlow (App de Exemplo) — Disciplina DevSecOps
+# TaskFlow (App de Exemplo) — Disciplina DevSecOps.
 
 Esta é a aplicação de laboratório usada em **todos os encontros práticos** da
 disciplina. É um gerenciador de tarefas (to-do list) simples em Python/Flask,

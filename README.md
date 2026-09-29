@@ -22,7 +22,6 @@ cd devsecops
 sudo apt install python3-venv
 python3 -m venv .venv
 source .venv/bin/activate #Linux    &     # Windows: venv\Scripts\activate
-
 sudo apt install python3-pip
 pip install -r requirements.txt
 python app.py

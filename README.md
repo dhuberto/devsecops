@@ -19,6 +19,7 @@ Este código contém vulnerabilidades **intencionais** para fins didáticos
 ```bash
 git clone https://github.com/dhuberto/devsecops.git
 cd devsecops
+sudo apt install python3.14-venv
 python3 -m venv .venv
 source .venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt

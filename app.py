@@ -233,6 +233,6 @@ if __name__ == "__main__":
 # - O que mudou: Exclusao completa do endpoint `/debug/info`.
 # - Por quê: Impede a exposicao sensivel de informacoes do ambiente e o vazamento do token de sessao/SECRET_KEY.
 
-# Hardening no Servidor de Desenvolvimento e Biscoitos de Sessao
+# Hardening no Servidor de Desenvolvimento e Coockie de Sessao
 # - O que mudou: Desativacao da flag `debug=True`, mudanca do host para `127.0.0.1` e adicao de `SESSION_COOKIE_HTTPONLY = True` e `SESSION_COOKIE_SAMESITE = 'Lax'`.
 # - Por quê: Bloqueia a execucao remota de codigo pelo debugger do Werkzeug na rede local e protege o cookie de sessao contra ataques do tipo CSRF e leitura via JavaScript malicioso.

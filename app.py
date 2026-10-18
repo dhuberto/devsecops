@@ -43,12 +43,17 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 # Caminho do banco configuravel: no container aponta para /app/data (unica
 # pasta gravavel pelo usuario nao-root). Localmente continua "taskflow.db".
-DATABASE = os.environ.get("TASKFLOW_DATABASE", "taskflow.db")
+DATABASE = os.environ.get("TASKFLOW_DATABASE", os.path.join(os.getcwd(), "data", "taskflow.db"))
 
 
 def get_db():
     db = getattr(g, "_database", None)
     if db is None:
+        # Garante que o diretorio pai do banco de dados exista antes de conectar
+        db_dir = os.path.dirname(DATABASE)
+        if db_dir and not os.path.exists(db_dir):
+            os.makedirs(db_dir, exist_ok=True)
+
         db = g._database = sqlite3.connect(DATABASE)
         db.row_factory = sqlite3.Row
     return db
@@ -90,11 +95,14 @@ def init_db():
     admin_password = os.environ.get("TASKFLOW_ADMIN_PASSWORD")
     cur = db.execute("SELECT COUNT(*) AS total FROM users")
     if cur.fetchone()["total"] == 0 and admin_password:
-        db.execute(
-            "INSERT INTO users (username, password) VALUES (?, ?)",
-            ("admin", generate_password_hash(admin_password)),
-        )
-        db.commit()
+        try:
+            db.execute(
+                "INSERT INTO users (username, password) VALUES (?, ?)",
+                ("admin", generate_password_hash(admin_password)),
+            )
+            db.commit()
+        except sqlite3.IntegrityError:
+            pass
 
 
 # ANTES: init_db() so era chamado dentro do bloco __main__.

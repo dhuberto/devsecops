@@ -1,44 +1,48 @@
 """
-TaskFlow - Aplicação de exemplo (Versão Segura/Corrigida)
+TaskFlow - Aplicacao de exemplo da disciplina DevSecOps (versao CORRIGIDA).
 
-Este arquivo demonstra as correções aplicadas sobre a linha de base vulnerável.
-As correções abordam falhas comuns identificadas em processos de SAST, DAST e revisão de código.
+Vulnerabilidades da linha de base e como foram corrigidas:
+  1. SQL Injection (login e busca)  -> consultas parametrizadas ("?").
+  2. XSS armazenado                 -> HTML em templates Jinja2 (autoescape).
+  3. SECRET_KEY hardcoded           -> lida de TASKFLOW_SECRET_KEY (ambiente/.env).
+  4. Senhas em texto puro           -> hash com salt (werkzeug.security); senha
+                                       inicial do admin vem de TASKFLOW_ADMIN_PASSWORD.
+  5. Endpoint /debug/info exposto   -> removido (vazava a SECRET_KEY).
+  6. debug=True e host 0.0.0.0      -> removidos; em producao roda via gunicorn.
+  (Dependencias com CVE sao tratadas no requirements.txt + pip-audit/Dependabot.)
 """
 
 import os
 import sqlite3
 
-# Importação de bibliotecas para segurança e gerenciamento de ambiente
 from dotenv import load_dotenv
 from flask import Flask, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
-# CORREÇÃO: Gerenciamento de Configuração (12-Factor App)
-# Nunca comite segredos. Usamos dotenv para carregar variáveis locais durante o desenvolvimento.
-# Em produção, essas variáveis devem ser injetadas pela infraestrutura (ex: Kubernetes Secrets).
+# Carrega variaveis do arquivo .env (apenas desenvolvimento local).
+# O .env esta no .gitignore e NUNCA deve ser commitado.
 load_dotenv()
 
 app = Flask(__name__)
 
-# CORREÇÃO (Vulnerabilidade #3): Remoção de Segredos Hardcoded
-# Antes: app.config["SECRET_KEY"] = "s3gr3d0-super-secreto..."
-# O uso de segredos no código fonte é uma falha crítica. Agora, exigimos que
-# seja injetado via variável de ambiente, aplicando o padrão "fail-fast".
+# ANTES: SECRET_KEY com valor fixo no codigo (achado de SAST/secret scanning).
+# AGORA: lida do ambiente; sem ela a app nao sobe (fail fast).
 _secret_key = os.environ.get("TASKFLOW_SECRET_KEY")
 if not _secret_key:
     raise RuntimeError(
-        "ERRO CRÍTICO: TASKFLOW_SECRET_KEY não definida. "
-        "A aplicação não pode iniciar de forma segura sem uma chave de sessão."
+        "Variavel de ambiente TASKFLOW_SECRET_KEY nao foi definida. "
+        "Configure-a antes de iniciar a aplicacao "
+        "(ex: export TASKFLOW_SECRET_KEY='valor-aleatorio-e-longo')."
     )
 app.config["SECRET_KEY"] = _secret_key
 
-# CORREÇÃO ADICIONAL: Hardening de Cookies de Sessão
-# Impede que o cookie seja lido via JavaScript (mitigando roubo de sessão por XSS)
+# AGORA: cookie de sessao inacessivel via JavaScript e nao enviado em
+# requisicoes cross-site.
 app.config["SESSION_COOKIE_HTTPONLY"] = True
-# Limita o envio do cookie em requisições cross-site (mitigando CSRF)
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
-# Caminho do banco parametrizado para facilitar deployments em containers (ex: volumes Docker)
+# Caminho do banco configuravel: no container aponta para /app/data (unica
+# pasta gravavel pelo usuario nao-root). Localmente continua "taskflow.db".
 DATABASE = os.environ.get("TASKFLOW_DATABASE", "taskflow.db")
 
 
@@ -79,10 +83,10 @@ def init_db():
     )
     db.commit()
 
-    # CORREÇÃO (Vulnerabilidade #4): Senhas em Texto Puro
-    # Antes: as senhas eram inseridas no banco sem nenhum tratamento ("admin123").
-    # Agora: A senha inicial do admin não fica no código. Se fornecida via ambiente,
-    # é armazenada usando um hash criptográfico seguro com salt (pbkdf2:sha256).
+    # ANTES: usuarios criados com senha em texto puro ("admin123") no codigo
+    #        e gravada sem hash no banco.
+    # AGORA: a senha inicial vem do ambiente e e gravada como HASH (com salt).
+    #        Se TASKFLOW_ADMIN_PASSWORD nao existir, nenhum usuario e criado.
     admin_password = os.environ.get("TASKFLOW_ADMIN_PASSWORD")
     cur = db.execute("SELECT COUNT(*) AS total FROM users")
     if cur.fetchone()["total"] == 0 and admin_password:
@@ -93,7 +97,9 @@ def init_db():
         db.commit()
 
 
-# Inicializa o DB ao carregar o módulo, permitindo execução correta via Gunicorn.
+# ANTES: init_db() so era chamado dentro do bloco __main__.
+# AGORA: roda na importacao do modulo, para funcionar tambem com o gunicorn
+#        (que importa o app e nunca executa o bloco __main__).
 with app.app_context():
     init_db()
 
@@ -112,29 +118,23 @@ def login():
         username = request.form.get("username", "")
         password = request.form.get("password", "")
 
+        # ANTES: "... WHERE username = '" + username + "' AND password = '" ...
+        #        -> SQL Injection (ex.: usuario  admin' --  entrava sem senha).
+        # AGORA: query parametrizada; a senha e conferida pelo hash, fora do SQL.
         db = get_db()
-        
-        # CORREÇÃO (Vulnerabilidade #1): SQL Injection
-        # Antes: A query usava concatenação ("... WHERE username = '" + username + "'...")
-        # Agora: Usamos consultas parametrizadas (?). O driver sqlite3 escapa as entradas,
-        # impedindo que payloads maliciosos alterem a estrutura da query.
         cur = db.execute("SELECT * FROM users WHERE username = ?", (username,))
         user = cur.fetchone()
 
-        # Verificação do hash da senha e não do texto puro
         if user and check_password_hash(user["password"], password):
-            # CORREÇÃO ADICIONAL: Fixação de Sessão
-            # Limpar a sessão antes de logar garante a renovação do ID da sessão.
+            # Limpa a sessao anterior antes de autenticar (evita fixacao de sessao).
             session.clear()
             session["user_id"] = user["id"]
             session["username"] = user["username"]
             return redirect(url_for("tasks"))
-        error = "Usuário ou senha inválidos."
+        error = "Usuario ou senha invalidos."
 
-    # CORREÇÃO (Vulnerabilidade #2): Cross-Site Scripting (XSS)
-    # Antes: O HTML era retornado via f-strings no Python (diretamente).
-    # Agora: O uso de render_template garante que o Jinja2 aplique autoescape em
-    # variáveis interpoladas (como o erro), neutralizando payloads XSS.
+    # ANTES: HTML retornado com f-string (Semgrep: directly-returned-format-string).
+    # AGORA: template Jinja2 com autoescape.
     return render_template("login.html", error=error)
 
 
@@ -153,8 +153,8 @@ def tasks():
     db = get_db()
 
     if search:
-        # CORREÇÃO (Vulnerabilidade #1): SQL Injection na Busca
-        # O padrão do LIKE é construído em memória e passado como parâmetro
+        # ANTES: "... AND title LIKE '%" + search + "%'" -> SQL Injection.
+        # AGORA: o padrao do LIKE e montado fora do SQL e passado como parametro.
         like_pattern = f"%{search}%"
         rows = db.execute(
             "SELECT * FROM tasks WHERE user_id = ? AND title LIKE ?",
@@ -165,9 +165,8 @@ def tasks():
             "SELECT * FROM tasks WHERE user_id = ?", (session["user_id"],)
         ).fetchall()
 
-    # CORREÇÃO (Vulnerabilidade #2): Cross-Site Scripting (XSS)
-    # A renderização de listas de tarefas via templates protege contra scripts
-    # inseridos na descrição da tarefa por usuários mal-intencionados.
+    # ANTES: HTML montado com f-string -> XSS armazenado na descricao.
+    # AGORA: template Jinja2 com autoescape ("<script>" vira "&lt;script&gt;").
     return render_template(
         "tasks.html",
         rows=rows,
@@ -186,7 +185,6 @@ def new_task():
         description = request.form.get("description", "")
         if title:
             db = get_db()
-            # Uso correto de parametrização na inserção de dados
             db.execute(
                 "INSERT INTO tasks (user_id, title, description) VALUES (?, ?, ?)",
                 (session["user_id"], title, description),
@@ -197,15 +195,44 @@ def new_task():
     return render_template("new_task.html")
 
 
-# CORREÇÃO (Vulnerabilidade #5): Vazamento de Informações
-# O endpoint `/debug/info` que existia na versão base foi REMOVIDO.
-# Ele expunha dados críticos como a SECRET_KEY para qualquer visitante não autenticado.
+# ANTES: rota /debug/info publica, retornando versao do Python, plataforma
+#        e a propria SECRET_KEY.
+# AGORA: rota removida.
 
 
 if __name__ == "__main__":
-    # CORREÇÃO (Vulnerabilidade #6): Configuração de Execução Insegura
-    # Antes: app.run(host="0.0.0.0", port=5000, debug=True)
-    # O modo `debug=True` ativa o console do Werkzeug, permitindo Execução Remota
-    # de Código (RCE) se exposto. Agora, a aplicação restringe o binding ao localhost
-    # e desativa o debug. Em produção, deve-se usar um servidor WSGI adequado (Gunicorn).
+    # ANTES: app.run(host="0.0.0.0", port=5000, debug=True)
+    #        -> debugger do Werkzeug (execucao remota de codigo) exposto na rede.
+    # AGORA: servidor de desenvolvimento so na maquina local, sem debug.
+    #        Porta 5001 para evitar conflito com o AirPlay do macOS (porta 5000).
+    #        Em producao/container a app roda com gunicorn (ver Dockerfile).
     app.run(host="127.0.0.1", port=5001)
+
+
+# =============================================================================
+# RESUMO DAS CORREÇÕES E MELHORIAS DE SEGURANÇA NO APP.PY
+# =============================================================================
+
+# Remediacao de SQL Injection (Consultas Parametrizadas)
+# - O que mudou: Uso do placeholder "?" nas consultas no login e na busca por tarefas.
+# - Por quê: Elimina a concatenacao de strings enviadas por usuarios, garantindo que a entrada do usuario seja tratada estritamente como dado e nao executada como instrucao SQL.
+
+# Mitigacao de XSS e Injecao de HTML (Templates Jinja2)
+# - O que mudou: Substituicao de HTML formatado diretamente no codigo por `render_template` com arquivos `.html`.
+# - Por quê: O Jinja2 ativa por padrao o mecanismo de autoescape, convertendo caracteres perigosos (como `<script>`) em entidades HTML seguras (`&lt;script&gt;`), saneando as descricoes de tarefas.
+
+# Remocao de Segredos Hardcoded (TASKFLOW_SECRET_KEY e TASKFLOW_ADMIN_PASSWORD)
+# - O que mudou: Leitura obrigatoria da `SECRET_KEY` e da senha do administrador a partir de variaveis de ambiente (via python-dotenv ou runtime).
+# - Por quê: Previne o vazamento de chaves secretas e senhas padrao no historico de commits do Git e ativa o comportamento de fail-fast caso a chave nao esteja definida.
+
+# Armazenamento Seguro de Credenciais (Hash de Senha)
+# - O que mudou: Utilizacao de `generate_password_hash` e `check_password_hash` da biblioteca Werkzeug.
+# - Por quê: Evita o armazenamento de senhas em texto puro no banco de dados SQLite, aplicando algoritmo de hashing forte com inclusao automatica de salt.
+
+# Remocao de Endpoint Exposto (/debug/info)
+# - O que mudou: Exclusao completa do endpoint `/debug/info`.
+# - Por quê: Impede a exposicao sensivel de informacoes do ambiente e o vazamento do token de sessao/SECRET_KEY.
+
+# Hardening no Servidor de Desenvolvimento e Biscoitos de Sessao
+# - O que mudou: Desativacao da flag `debug=True`, mudanca do host para `127.0.0.1` e adicao de `SESSION_COOKIE_HTTPONLY = True` e `SESSION_COOKIE_SAMESITE = 'Lax'`.
+# - Por quê: Bloqueia a execucao remota de codigo pelo debugger do Werkzeug na rede local e protege o cookie de sessao contra ataques do tipo CSRF e leitura via JavaScript malicioso.

@@ -43,13 +43,12 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 # Caminho do banco configuravel: no container aponta para /app/data (unica
 # pasta gravavel pelo usuario nao-root). Localmente continua "taskflow.db".
-DATABASE = os.environ.get("TASKFLOW_DATABASE", os.path.join(os.getcwd(), "data", "taskflow.db"))
+DATABASE = os.environ.get("TASKFLOW_DATABASE", "/app/data/taskflow.db")
 
 
 def get_db():
     db = getattr(g, "_database", None)
     if db is None:
-        # Garante que o diretorio pai do banco de dados exista antes de conectar
         db_dir = os.path.dirname(DATABASE)
         if db_dir and not os.path.exists(db_dir):
             os.makedirs(db_dir, exist_ok=True)

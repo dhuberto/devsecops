@@ -58,3 +58,24 @@ jobs:
       #         nomes indefinidos e codigo morto. Se falhar, o PR fica vermelho.
       - name: Lint com ruff
         run: ruff check .
+
+
+# Inclusão do permissions: contents: read
+# - O que mudou: Restringiu o token de execução do GitHub (GITHUB_TOKEN) apenas para leitura de código.
+# - Por quê: Aplica o princípio de mínimo privilégio para evitar que, em caso de comprometimento do pipeline, um atacante consiga alterar arquivos no repositório.
+
+# Centralização das versões em env (PYTHON_VERSION e RUFF_VERSION)
+# - O que mudou: As versões foram definidas como variáveis globais no topo do arquivo em vez de ficarem espalhadas nos steps.
+# - Por quê: Garante padronização e reprodutibilidade, alinhando a versão do Python no CI (3.12) com a mesma utilizada no Dockerfile e facilitando manutenções futuras.
+
+# Fixação das Actions por Commit SHA (actions/checkout e actions/setup-python)
+# - O que mudou: Substituiu as tags mutáveis (ex: @v4, @v5) pelo hash SHA exato do commit (ex: @11d5960...).
+# - Por quê: Protege a esteira contra ataques na cadeia de suprimentos (Supply Chain Attacks), garantindo que o código da action não seja alterado de forma maliciosa na origem.
+
+# Adição do Cache do Pip (cache: pip)
+# - O que mudou: Ativou a opção de cache na action do Python.
+# - Por quê: Reutiliza os pacotes instalados em execuções anteriores, acelerando o tempo de execução da esteira.
+
+# Substituição do py_compile pelo ruff check .
+# - O que mudou: Substituiu a simples checagem de sintaxe do Python pelo analisador estático (linter) Ruff com versão fixada (0.6.9).
+# - Por quê: Cria um quality gate efetivo, capaz de detectar variáveis não utilizadas, erro de pacotes faltantes (ex: import os), nomes indefinidos e más práticas que o compilador padrão deixava passar.

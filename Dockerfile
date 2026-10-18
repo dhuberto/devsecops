@@ -30,7 +30,8 @@ WORKDIR /app
 RUN groupadd --system taskflow && \
     useradd --system --gid taskflow --no-create-home --shell /usr/sbin/nologin taskflow && \
     mkdir -p /app/data && \
-    chown taskflow:taskflow /app/data
+    chown -R taskflow:taskflow /app/data && \
+    chmod 770 /app/data
 
 # ANTES: "COPY --chown=taskflow:taskflow . ." levava .env, .git, codigo/ e o
 #        banco local para a imagem, e deixava o codigo alteravel pela app.

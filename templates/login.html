@@ -1,8 +1,3 @@
-<!-- ============================================================================= -->
-<!-- Template: Login (templates/login.html)                                        -->
-<!-- Interface de autenticação de usuários da aplicação TaskFlow.                  -->
-<!-- ============================================================================= -->
-
 <!doctype html>
 <html lang="pt-br">
 <head>
@@ -26,3 +21,19 @@
   {% if error %}<p style="color:red">{{ error }}</p>{% endif %}
 </body>
 </html>
+
+
+<!-- ============================================================================= -->
+<!-- RESUMO DAS MUDANÇAS E BOAS PRÁTICAS APLICADAS NO LOGIN.HTML                  -->
+<!-- ============================================================================= -->
+
+<!-- Adição de Template HTML para Interface de Login                               -->
+<!-- - O que mudou: Extração da marcação HTML do formulário de login para um      -->
+<!--   arquivo de template Jinja2 dedicado.                                       -->
+<!-- - Por quê: Elimina a renderização de strings HTML diretamente no Python,       -->
+<!--   permitindo o tratamento automatizado e seguro de saídas pelo Flask/Jinja.  -->
+
+<!-- Autoescape e Sanitização de Erros                                             -->
+<!-- - O que mudou: Exibição da variável de erro via {{ error }} no template.      -->
+<!-- - Por quê: Protege a aplicação contra Reflected XSS no tratamento de          -->
+<!--   mensagens de falha de autenticação devolvidas pelo backend.               -->

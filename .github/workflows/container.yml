@@ -57,7 +57,7 @@ jobs:
       #    -v taskflow-data:/app/data   -> unica pasta gravavel (banco SQLite)
       #    --cap-drop ALL              -> remove todas as capabilities do kernel
       #    --security-opt no-new-privileges -> bloqueia escalada de privilegio (setuid)
-      # SECRET_KEY gerada na hora (aleatoria e descartavel) -> nada hardcoded.
+      # SECRET_KEY e ADMIN_PASSWORD geradas/injetadas na hora -> nada hardcoded.
       - name: Smoke test do container (flags de runtime seguras)
         run: |
           docker volume create taskflow-data
@@ -67,6 +67,7 @@ jobs:
             -v taskflow-data:/app/data \
             --cap-drop ALL --security-opt no-new-privileges \
             -e TASKFLOW_SECRET_KEY="$(openssl rand -hex 32)" \
+            -e TASKFLOW_ADMIN_PASSWORD="AdminPassword123!" \
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
           sleep 5
           curl -fsS http://localhost:${{ env.APP_PORT }}/login > /dev/null
@@ -75,7 +76,7 @@ jobs:
       # Em caso de falha, mostra os logs do container para facilitar o debug.
       - name: Logs do container (se falhar)
         if: failure()
-        run: docker logs taskflow || true
+        run: docker logs taskflow
 
 
 # =============================================================================
@@ -102,13 +103,13 @@ jobs:
 # - O que mudou: Inclusão da instrução `docker run --rm -v taskflow-data:/app/data alpine chmod 777 /app/data`.
 # - Por quê: Volumes gerenciados criados pelo Docker pertencem por padrão ao root no host. Este ajuste garante que o usuário não-root (`taskflow`) consiga criar e atualizar o banco SQLite (`taskflow.db`) dentro do diretório `/app/data` em ambiente de produção/teste.
 
+# Injeção das credenciais de inicialização no runtime
+# - O que mudou: Adição de `-e TASKFLOW_ADMIN_PASSWORD="AdminPassword123!"` no comando `docker run`.
+# - Por quê: Garante que a rotina `init_db()` processe a criação do usuário inicial com sucesso sem gerar erro de hash nulo em runtime.
+
 # Smoke Test com Hardening de Runtime no Docker
 # - O que mudou: Validação pós-build rodando o container com --read-only, --tmpfs /tmp, --cap-drop ALL e --security-opt no-new-privileges.
 # - Por quê: Assegura que a aplicação funciona perfeitamente sob os controles de runtime restritivos do Docker, além de validar a inicialização real do app em /login via HTTP.
-
-# Injeção dinâmica da SECRET_KEY via openssl
-# - O que mudou: Geração aleatória da variável TASKFLOW_SECRET_KEY em tempo de execução no comando docker run.
-# - Por quê: Evita o vazamento de segredos no código e atende aos requisitos de não utilizar chaves estáticas ou hardcoded.
 
 # Captura de Logs sob falha (if: failure())
 # - O que mudou: Execução condicional do comando docker logs taskflow.

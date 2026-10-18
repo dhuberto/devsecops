@@ -57,26 +57,26 @@ CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "app:app"]
 # RESUMO DAS CORREÇÕES E PRÁTICAS DE HARDENING APLICADAS NO DOCKERFILE
 # =============================================================================
 
-# Correção 1: Fixação de Imagem Base e Multi-Stage Build (Substituição da tag `latest`)[cite: 2]
-# - O que mudou: Substituição da imagem `python:latest` pela versão fixa e reduzida `python:3.12-slim` com estratégia de build em múltiplos estágios (build e runtime)[cite: 2].
-# - Por quê: Garante reprodutibilidade da imagem, reduz a superfície de ataque ao utilizar uma base mínima (slim) e previne que arquivos/ferramentas do processo de compilação permaneçam no container final[cite: 2].
+# Correção 1: Fixação de Imagem Base e Multi-Stage Build (Substituição da tag `latest`)
+# - O que mudou: Substituição da imagem `python:latest` pela versão fixa e reduzida `python:3.12-slim` com estratégia de build em múltiplos estágios (build e runtime).
+# - Por quê: Garante reprodutibilidade da imagem, reduz a superfície de ataque ao utilizar uma base mínima (slim) e previne que arquivos/ferramentas do processo de compilação permaneçam no container final.
 
-# Correção 2: Execução com Usuário Não-Root (Princípio do Mínimo Privilégio)[cite: 2]
-# - O que mudou: Criação do grupo/usuário de sistema sem permissão de login (`taskflow`) e declaração explicativa da instrução `USER taskflow`[cite: 2].
-# - Por quê: Evita que o container rode com privilégios de `root`, impedindo a escalada de privilégios e o comprometimento do host caso a aplicação seja invadida[cite: 2].
+# Correção 2: Execução com Usuário Não-Root (Princípio do Mínimo Privilégio)
+# - O que mudou: Criação do grupo/usuário de sistema sem permissão de login (`taskflow`) e declaração explicativa da instrução `USER taskflow`.
+# - Por quê: Evita que o container rode com privilégios de `root`, impedindo a escalada de privilégios e o comprometimento do host caso a aplicação seja invadida.
 
-# Correção 3: Instalação Limpa de Dependências e Seleção Seletiva de Arquivos[cite: 2]
-# - O que mudou: Adição da flag `--no-cache-dir` na instalação de pacotes e substituição do `COPY . .` pela cópia explícita de apenas arquivos necessários (`app.py` e `templates/`)[cite: 2].
-# - Por quê: Reduz o tamanho final da imagem, otimiza o tempo de build e previne o vazamento não intencional de arquivos locais sensíveis (como `.env`, `.git` ou repositórios de testes)[cite: 2].
+# Correção 3: Instalação Limpa de Dependências e Seleção Seletiva de Arquivos
+# - O que mudou: Adição da flag `--no-cache-dir` na instalação de pacotes e substituição do `COPY . .` pela cópia explícita de apenas arquivos necessários (`app.py` e `templates/`).
+# - Por quê: Reduz o tamanho final da imagem, otimiza o tempo de build e previne o vazamento não intencional de arquivos locais sensíveis (como `.env`, `.git` ou repositórios de testes).
 
-# Correção 4: Remoção de Credenciais e Segredos na Construção[cite: 2]
-# - O que mudou: Exclusão total da variável `ENV ADMIN_PASSWORD` das camadas da imagem[cite: 2].
-# - Por quê: Elimina o vazamento de segredos via histórico do container (`docker history`), exigindo que chaves e senhas sejam fornecidas dinamicamente no runtime[cite: 2].
+# Correção 4: Remoção de Credenciais e Segredos na Construção
+# - O que mudou: Exclusão total da variável `ENV ADMIN_PASSWORD` das camadas da imagem.
+# - Por quê: Elimina o vazamento de segredos via histórico do container (`docker history`), exigindo que chaves e senhas sejam fornecidas dinamicamente no runtime.
 
-# Correção 5: Servidor de Aplicação de Produção (Substituição do Dev Server do Flask)[cite: 2]
-# - O que mudou: Troca do comando de execução direta em Python por um servidor WSGI pronto para produção (`gunicorn`)[cite: 2].
-# - Por quê: Garante melhor performance, resiliência no tratamento de requisições simultâneas e atende às boas práticas de implantação em produção[cite: 2].
+# Correção 5: Servidor de Aplicação de Produção (Substituição do Dev Server do Flask)
+# - O que mudou: Troca do comando de execução direta em Python por um servidor WSGI pronto para produção (`gunicorn`).
+# - Por quê: Garante melhor performance, resiliência no tratamento de requisições simultâneas e atende às boas práticas de implantação em produção.
 
-# Correção 6: Desativação do Modo Debug e Permissões de Leitura[cite: 2]
-# - O que mudou: Remoção do parâmetro `debug=True` e isolamento de escrita apenas para o diretório de dados (`/app/data`)[cite: 2].
-# - Por quê: Desativa a execução remota de código via Werkzeug debugger e protege os arquivos do código-fonte contra modificações ou sobrescritas por parte do processo do container em execução[cite: 2].
+# Correção 6: Desativação do Modo Debug e Permissões de Leitura
+# - O que mudou: Remoção do parâmetro `debug=True` e isolamento de escrita apenas para o diretório de dados (`/app/data`).
+# - Por quê: Desativa a execução remota de código via Werkzeug debugger e protege os arquivos do código-fonte contra modificações ou sobrescritas por parte do processo do container em execução.

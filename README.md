@@ -58,7 +58,7 @@ Cada módulo cria, dentro da sua própria pasta `codigo/`, uma cópia ou um
 patch desta aplicação demonstrando o "antes" (vulnerável) e o "depois"
 (corrigido) referente ao tema daquele encontro.
 
-# Relatório de Implementação e Hardening - Projeto TaskFlow (Atividade 1)
+# Relatório de Implementação e Hardening
 
 ## Resumo Executivo das Ações Realizadas
 

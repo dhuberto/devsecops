@@ -68,16 +68,17 @@ jobs:
             -e TASKFLOW_ADMIN_PASSWORD="AdminPassword123!" \
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-      # Smoke test com requisição HTTP /login
-      - name: Validar resposta /login (Smoke Test)
-        run: |
-          sleep 5
-          curl -fsS http://localhost:${{ env.APP_PORT }}/login > /dev/null
-          echo "Container respondeu em /login"
+      # Aguarda a inicialização completa do Gunicorn/Flask em step separado
+      - name: Aguardar inicialização do container
+        run: sleep 5
 
-      # Em caso de falha no curl ou inicializacao, imprime o log do container
+      # Smoke test em step isolado para registrar a falha HTTP 500 individualmente
+      - name: Validar resposta /login (Smoke Test)
+        run: curl -fsS http://localhost:${{ env.APP_PORT }}/login > /dev/null
+
+      # Captura obrigatoria dos logs do container mesmo em caso de erro no step anterior
       - name: Exibir traceback dos logs do container em caso de falha
-        if: failure()
+        if: always()
         run: docker logs taskflow
 
 
@@ -109,6 +110,6 @@ jobs:
 # - O que mudou: Adição de `-e TASKFLOW_ADMIN_PASSWORD="AdminPassword123!"` no comando `docker run`.
 # - Por quê: Garante que a rotina `init_db()` processe a criação do usuário inicial com sucesso sem gerar erro de hash nulo em runtime.
 
-# Step Isolado de Logs sob falha (if: failure())
-# - O que mudou: Separação do comando `docker logs taskflow` em uma etapa própria no workflow.
-# - Por quê: Garante que, se o passo de `curl` retornar erro HTTP 500, o GitHub Actions continuará a execução e exibirá a mensagem e a linha do erro em Python no log da action.
+# Separação Granular de Steps e Coleta de Logs (`if: always()`)
+# - O que mudou: Divisão dos comandos de inicialização, delay, teste HTTP e coleta de logs em etapas separadas no YAML.
+# - Por quê: Evita o encerramento prematuro do script em bloco Bash e assegura que o comando `docker logs taskflow` seja executado incondicionalmente, exibindo o traceback do Python no console do GitHub Actions para resolução rápida do erro 500.

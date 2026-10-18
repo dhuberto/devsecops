@@ -5,12 +5,9 @@
     <title>TaskFlow - Login</title>
 </head>
 <body>
-    {#
-      REMEDIAÇÃO DE XSS / INJEÇÃO DE HTML:
-      O Jinja2 aplica autoescape automático por padrão para todas as variáveis
-      renderizadas via {{ ... }}. Caso a variável 'error' contenha caracteres
-      maliciosos como '<script>alert(1)</script>', eles serão convertidos para
-      entidades HTML seguras ('&lt;script&gt;alert(1)&lt;/script&gt;').
+    {# 
+      O Jinja2 aplica autoescape automatico para todas as variaveis renderizadas via {{ ... }}.
+      Isso impede vulnerabilidades de XSS Refletido e Injecao de HTML na exibicao do erro.
     #}
     <h2>TaskFlow - Autenticação</h2>
 
@@ -18,12 +15,6 @@
         <p style="color: red;">{{ error }}</p>
     {% endif %}
 
-    {#
-      PROTEÇÃO DE FORMULÁRIO E AUTENTICAÇÃO:
-      Envio via método POST para que as credenciais não fiquem expostas na URL.
-      Desativação de autocomplete na entrada de usuário para mitigar reutilização
-      de dados em estações compartilhadas.
-    #}
     <form method="POST" action="/login">
         <div>
             <label for="username">Usuário:</label>
@@ -46,7 +37,7 @@ RESUMO DAS CORREÇÕES E PRÁTICAS DE HARDENING NO TEMPLATES/LOGIN.HTML
 =============================================================================
 
 Sintaxe Correta de Comentários no Jinja2 ({# ... #})
-- O que mudou: Substituição de comentários HTML (<!-- ... -->) contendo lógica
+- O que mudou: Substituição de comentários HTML contendo lógica
   do Jinja por blocos de comentário nativos do Jinja2 ({# ... #}).
 - Por quê: O analisador do Jinja2 tentava interpretar a pontuação e os
   símbolos '{{ ... }}' contidos dentro de comentários HTML normais como se

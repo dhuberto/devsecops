@@ -1,14 +1,28 @@
+<!-- ============================================================================= -->
+<!-- Template: Login (templates/login.html)                                        -->
+<!-- Interface de autenticação de usuários da aplicação TaskFlow.                  -->
+<!-- ============================================================================= -->
+
 <!doctype html>
 <html lang="pt-br">
-<head><meta charset="utf-8"><title>TaskFlow - Login</title></head>
+<head>
+  <meta charset="utf-8">
+  <title>TaskFlow - Login</title>
+</head>
 <body>
-  {# Jinja2 escapa automaticamente as variaveis {{ ... }} (anti-XSS). #}
+  <!-- O Jinja2 trata todas as variaveis inseridas em {{ ... }} com autoescape   -->
+  <!-- ativado por padrao, convertendo caracteres de marcacao HTML em entidades. -->
   <h1>TaskFlow - Login</h1>
+
+  <!-- Formularios de autenticacao utilizam metodo POST para evitar expor        -->
+  <!-- credenciais (usuario/senha) na URL da requisicao.                        -->
   <form method="post">
     Usuario: <input type="text" name="username"><br>
     Senha: <input type="password" name="password"><br>
     <input type="submit" value="Entrar">
   </form>
+
+  <!-- Renderizacao condicional segura de mensagens de erro emitidas pelo backend. -->
   {% if error %}<p style="color:red">{{ error }}</p>{% endif %}
 </body>
 </html>

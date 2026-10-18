@@ -15,9 +15,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 FROM python:3.12-slim AS runtime
 
-# Banco aponta para /app/data: unica pasta gravavel (volume no docker run).
+# Banco aponta para /app/data (volume no docker run).
+# TMPDIR e PYTHONPYCACHEPREFIX sao direcionados para /tmp (tmpfs) para permitir
+# escrita de arquivos temporarios/cache mesmo com a flag --read-only ativa.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    TMPDIR=/tmp \
+    PYTHONPYCACHEPREFIX=/tmp \
     TASKFLOW_DATABASE=/app/data/taskflow.db
 
 COPY --from=build /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages

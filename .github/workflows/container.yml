@@ -51,17 +51,15 @@ jobs:
           exit-code: "1"
           format: table
 
-      # Smoke test com flags de runtime seguras:
-      #    --read-only                 -> filesystem da imagem imutavel
-      #    --tmpfs /tmp                -> area temporaria em memoria (gunicorn/cache usam)
-      #    -v taskflow-data:/app/data   -> unica pasta gravavel (banco SQLite)
-      #    --cap-drop ALL              -> remove todas as capabilities do kernel
-      #    --security-opt no-new-privileges -> bloqueia escalada de privilegio (setuid)
-      # SECRET_KEY e ADMIN_PASSWORD geradas/injetadas na hora -> nada hardcoded.
-      - name: Smoke test do container (flags de runtime seguras)
+      # Ajuste previo do volume para garantir permissao total do usuario nao-root (taskflow)
+      - name: Criar volume e permissões
         run: |
           docker volume create taskflow-data
           docker run --rm -v taskflow-data:/app/data alpine chmod 777 /app/data
+
+      # Executa o container injetando as credenciais de runtime exigidas pelo app.py
+      - name: Iniciar container
+        run: |
           docker run -d --name taskflow -p ${{ env.APP_PORT }}:${{ env.APP_PORT }} \
             --read-only --tmpfs /tmp \
             -v taskflow-data:/app/data \
@@ -69,12 +67,16 @@ jobs:
             -e TASKFLOW_SECRET_KEY="$(openssl rand -hex 32)" \
             -e TASKFLOW_ADMIN_PASSWORD="AdminPassword123!" \
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      # Smoke test com requisição HTTP /login
+      - name: Validar resposta /login (Smoke Test)
+        run: |
           sleep 5
           curl -fsS http://localhost:${{ env.APP_PORT }}/login > /dev/null
           echo "Container respondeu em /login"
 
-      # Em caso de falha, mostra os logs do container para facilitar o debug.
-      - name: Logs do container (se falhar)
+      # Em caso de falha no curl ou inicializacao, imprime o log do container
+      - name: Exibir traceback dos logs do container em caso de falha
         if: failure()
         run: docker logs taskflow
 
@@ -107,10 +109,6 @@ jobs:
 # - O que mudou: Adição de `-e TASKFLOW_ADMIN_PASSWORD="AdminPassword123!"` no comando `docker run`.
 # - Por quê: Garante que a rotina `init_db()` processe a criação do usuário inicial com sucesso sem gerar erro de hash nulo em runtime.
 
-# Smoke Test com Hardening de Runtime no Docker
-# - O que mudou: Validação pós-build rodando o container com --read-only, --tmpfs /tmp, --cap-drop ALL e --security-opt no-new-privileges.
-# - Por quê: Assegura que a aplicação funciona perfeitamente sob os controles de runtime restritivos do Docker, além de validar a inicialização real do app em /login via HTTP.
-
-# Captura de Logs sob falha (if: failure())
-# - O que mudou: Execução condicional do comando docker logs taskflow.
-# - Por quê: Agiliza o processo de troubleshooting e debugging em caso de quebra durante a execução do container ou no teste HTTP.
+# Step Isolado de Logs sob falha (if: failure())
+# - O que mudou: Separação do comando `docker logs taskflow` em uma etapa própria no workflow.
+# - Por quê: Garante que, se o passo de `curl` retornar erro HTTP 500, o GitHub Actions continuará a execução e exibirá a mensagem e a linha do erro em Python no log da action.

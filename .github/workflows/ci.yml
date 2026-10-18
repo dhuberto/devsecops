@@ -57,7 +57,7 @@ jobs:
       # AGORA: ruff (exigido pela atividade) -> detecta imports faltando,
       #         nomes indefinidos e codigo morto. Se falhar, o PR fica vermelho.
       - name: Lint com ruff
-        run: ruff check .
+        run: ruff check . #Verifica a aplicação app.py
 
 
 # Inclusão do permissions: contents: read

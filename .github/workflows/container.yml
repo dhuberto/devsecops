@@ -107,7 +107,7 @@ jobs:
 # - Por quê: Volumes gerenciados criados pelo Docker pertencem por padrão ao root no host. Este ajuste garante que o usuário não-root (`taskflow`) consiga criar e atualizar o banco SQLite (`taskflow.db`) dentro do diretório `/app/data` em ambiente de produção/teste.
 
 # Injeção das credenciais de inicialização no runtime
-# - O que mudou: Adição de `-e TASKFLOW_ADMIN_PASSWORD="AdminPassword123!"` no comando `docker run`.
+# - O que mudou: Adição de `-e TASKFLOW_ADMIN_PASSWORD` no comando `docker run`.
 # - Por quê: Garante que a rotina `init_db()` processe a criação do usuário inicial com sucesso sem gerar erro de hash nulo em runtime.
 
 # Separação Granular de Steps e Coleta de Logs (`if: always()`)

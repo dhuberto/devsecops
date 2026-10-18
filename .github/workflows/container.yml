@@ -41,7 +41,7 @@ jobs:
       # pin por SHA (imutavel) - evita que uma tag re-apontada rode codigo malicioso
       # gate: falha o build (exit-code 1) se houver HIGH ou CRITICAL
       # ignore-unfixed: CVEs sem correcao publicada nao bloqueiam (nao ha versao
-      #   para atualizar); ficam registradas no docs/hardening.md como risco aceito
+      #    para atualizar); ficam registradas no docs/hardening.md como risco aceito
       - name: Trivy image (gate ${{ env.TRIVY_SEVERITY }})
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -52,15 +52,16 @@ jobs:
           format: table
 
       # Smoke test com flags de runtime seguras:
-      #   --read-only                 -> filesystem da imagem imutavel
-      #   --tmpfs /tmp                -> area temporaria em memoria (gunicorn usa)
-      #   -v taskflow-data:/app/data   -> unica pasta gravavel (banco SQLite)
-      #   --cap-drop ALL              -> remove todas as capabilities do kernel
-      #   --security-opt no-new-privileges -> bloqueia escalada de privilegio (setuid)
+      #    --read-only                 -> filesystem da imagem imutavel
+      #    --tmpfs /tmp                -> area temporaria em memoria (gunicorn/cache usam)
+      #    -v taskflow-data:/app/data   -> unica pasta gravavel (banco SQLite)
+      #    --cap-drop ALL              -> remove todas as capabilities do kernel
+      #    --security-opt no-new-privileges -> bloqueia escalada de privilegio (setuid)
       # SECRET_KEY gerada na hora (aleatoria e descartavel) -> nada hardcoded.
       - name: Smoke test do container (flags de runtime seguras)
         run: |
           docker volume create taskflow-data
+          docker run --rm -v taskflow-data:/app/data alpine chmod 777 /app/data
           docker run -d --name taskflow -p ${{ env.APP_PORT }}:${{ env.APP_PORT }} \
             --read-only --tmpfs /tmp \
             -v taskflow-data:/app/data \
@@ -96,6 +97,10 @@ jobs:
 # Scan de vulnerabilidades de Container com Trivy (Quality Gate)
 # - O que mudou: Inclusão da action do Trivy bloqueando a esteira com exit-code: "1" em caso de vulnerabilidades HIGH ou CRITICAL.
 # - Por quê: Garante um Quality Gate que impede imagens vulneráveis de serem aceitas ou implantadas. O uso de ignore-unfixed: true foca a correção nas falhas que já possuem patch disponível.
+
+# Ajuste de permissão prévia no volume montado
+# - O que mudou: Inclusão da instrução `docker run --rm -v taskflow-data:/app/data alpine chmod 777 /app/data`.
+# - Por quê: Volumes gerenciados criados pelo Docker pertencem por padrão ao root no host. Este ajuste garante que o usuário não-root (`taskflow`) consiga criar e atualizar o banco SQLite (`taskflow.db`) dentro do diretório `/app/data` em ambiente de produção/teste.
 
 # Smoke Test com Hardening de Runtime no Docker
 # - O que mudou: Validação pós-build rodando o container com --read-only, --tmpfs /tmp, --cap-drop ALL e --security-opt no-new-privileges.

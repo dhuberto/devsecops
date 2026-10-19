@@ -18,7 +18,7 @@ permissions:
 
 env:
   VULN_IMAGE: taskflow:vuln
-  VULN_CONTEXT: codigo/app-exemplo
+  VULN_CONTEXT: .
   HARDENED_IMAGE: taskflow:hardened
   TRIVY_SEVERITY: HIGH,CRITICAL
 

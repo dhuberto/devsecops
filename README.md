@@ -53,7 +53,7 @@ Atividade 1 da disciplina DevSecOps (Aulas 1, 2 e 3);
 
 ```bash
 # 1. Clonar e entrar na pasta
-git clone https://github.com/Tiagocamilos/taskflow_pos_2026.git
+git clone https://github.com/dhuberto/devsecops.git
 cd devsecops
 
 # 2. Ambiente virtual e dependências

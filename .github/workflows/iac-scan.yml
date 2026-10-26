@@ -9,9 +9,9 @@
 #   usado nos Modulos 1, 3 e 4 desta disciplina.
 #
 # O QUE ELE FAZ:
-#   1. Dispara em todo push/PR que toque em arquivos ".tf" (evita rodar o
-#      scan de IaC sem necessidade em mudancas que nao mexem em
-#      infraestrutura).
+#   1. Dispara em todo push/PR. O filtro paths foi ajustado para abranger YAMLs
+#      ou removido do Pull Request para evitar que PRs fiquem travados esperando
+#      um check obrigatorio que nunca roda.
 #   2. Roda o Checkov contra os arquivos Terraform do repositorio.
 #   3. Roda o tfsec (via Trivy, que hoje incorpora as regras do tfsec)
 #      contra os mesmos arquivos.
@@ -29,11 +29,12 @@ on:
     branches: ["**"]
     paths:
       - "**/*.tf"
+      - "**/*compose*.yml"
       - ".github/workflows/iac-scan.yml"
   pull_request:
     branches: ["**"]
-    paths:
-      - "**/*.tf"
+    # Sem restrição de paths aqui para garantir que o PR check sempre execute e
+    # não trave o branch protection caso a branch exija esse workflow.
   workflow_dispatch:
 
 jobs:
@@ -50,7 +51,7 @@ jobs:
           # Diretorio raiz onde o Checkov deve procurar arquivos .tf,
           # CloudFormation, Dockerfile, Kubernetes manifests, etc.
           directory: .
-          framework: terraform
+          framework: terraform,dockerfile,dockercompose
           # "soft_fail: false" (padrao) faz a action retornar exit code
           # != 0 quando ha achados, marcando o job como "failed" - e o
           # comportamento desejado para um gate de seguranca em CI.

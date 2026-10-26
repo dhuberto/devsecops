@@ -1,51 +1,50 @@
-<!doctype html>
+{#
+Template Jinja2 - Listagem de tarefas do TaskFlow.
+
+Ponto-chave de seguranca (correcao da XSS armazenada do Modulo 3/4):
+task['title'] e task['description'] vem diretamente do banco de
+dados, ou seja, sao dados que o proprio usuario digitou ao criar a
+tarefa - portanto NAO SAO CONFIAVEIS. Como este template usa a sintaxe
+de expressao padrao (sem o filtro safe), o Jinja2 aplica autoescape
+automaticamente: qualquer "<", ">", "&", aspas etc. dentro da
+descricao e convertido para a entidade HTML equivalente.
+
+Resultado pratico: se alguem salvar uma descricao como
+<img src=x onerror=alert(1)>, o HTML final enviado ao navegador
+contera &lt;img src=x onerror=alert(1)&gt; - texto literal, exibido
+como caracteres na tela, e NAO como uma tag HTML interpretada. O
+navegador nunca chega a executar o script.
+
+Obs.: este e um comentario Jinja2 (nao HTML), pois o Jinja2 interpreta
+qualquer chave dupla dentro de comentarios HTML.
+#}
+<!DOCTYPE html>
 <html lang="pt-br">
 <head>
-  <meta charset="utf-8">
-  <title>TaskFlow - Minhas Tarefas</title>
+    <meta charset="UTF-8">
+    <title>TaskFlow - Minhas tarefas</title>
 </head>
 <body>
-  <!-- Variaveis vindas do contexto do Flask sao saneadas automaticamente no HTML. -->
-  <h1>Minhas tarefas ({{ username }})</h1>
+    <h1>Minhas tarefas ({{ username }})</h1>
 
-  <!-- Formulario de busca via GET com autopreenchimento seguro do termo buscado.  -->
-  <form method="get">
-    <input type="text" name="q" placeholder="buscar tarefa" value="{{ search }}">
-    <input type="submit" value="Buscar">
-  </form>
+    <form method="get">
+        <input type="text" name="q" placeholder="buscar tarefa" value="{{ search }}">
+        <input type="submit" value="Buscar">
+    </form>
 
-  <!-- Iteracao das tarefas cadastradas no SQLite. Cada campo (title, description) -->
-  <!-- e sanitizado pelo Jinja2 no momento da renderizacao (protecao anti-XSS).    -->
-  <ul>
-    {% for row in rows %}
-    <li>
-      <b>{{ row["title"] }}</b> - {{ row["description"] }}
-      {% if row["done"] %}(feita){% endif %}
-    </li>
-    {% else %}
-    <li>Nenhuma tarefa encontrada.</li>
-    {% endfor %}
-  </ul>
+    <ul>
+        {% for task in tasks %}
+        <li>
+            {# title e description passam pelo autoescape do Jinja2. #}
+            <b>{{ task['title'] }}</b> - {{ task['description'] }}
+            {% if task['done'] %}(feita){% endif %}
+        </li>
+        {% else %}
+        <li><em>Nenhuma tarefa encontrada.</em></li>
+        {% endfor %}
+    </ul>
 
-  <!-- Navegacao segura do sistema por rotas nomeadas.                            -->
-  <a href="{{ url_for('new_task') }}">Nova tarefa</a> |
-  <a href="{{ url_for('logout') }}">Sair</a>
+    <a href="{{ url_for('new_task') }}">Nova tarefa</a> |
+    <a href="{{ url_for('logout') }}">Sair</a>
 </body>
 </html>
-
-
-<!-- ============================================================================= -->
-<!-- RESUMO DAS MUDANÇAS E BOAS PRÁTICAS APLICADAS NO TASKS.HTML                  -->
-<!-- ============================================================================= -->
-
-<!-- Remediação de Stored XSS via Autoescape Nativo                                -->
-<!-- - O que mudou: Substituição da interpolação de f-strings (`{row['description']}`) -->
-<!--   pela renderização controlada Jinja2 (`{{ row['description'] }}`).          -->
-<!-- - Por quê: O Jinja2 converte caracteres como `<` e `>` em entidades HTML     -->
-<!--   inofensivas, impedindo a execução de scripts maliciosos gravados no banco. -->
-
-<!-- Conformidade com Quality Gate de SAST (Semgrep)                              -->
-<!-- - O que mudou: Remoção completa do padrão de código flagged por              -->
-<!--   `directly-returned-format-string`.                                         -->
-<!-- - Por quê: Permite que o pipeline automatizado (`sast.yml`) passe com sucesso -->
-<!--   na checagem estática de segurança exigida como Required Status Check.      -->

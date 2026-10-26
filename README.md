@@ -43,8 +43,7 @@ Abra o `.env` e preencha (sem aspas e sem espaços ao redor do `=`):
 TASKFLOW_SECRET_KEY=valor-gerado-no-passo-3
 TASKFLOW_ADMIN_PASSWORD=uma-senha-que-voce-escolher
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres123
-POSTGRES_DB=db
+POSTGRES_PASSWORD=postg
 ```
 
 ```bash

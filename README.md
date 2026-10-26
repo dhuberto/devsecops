@@ -58,3 +58,17 @@ patch desta aplicação demonstrando o "antes" (vulnerável) e o "depois"
 Teste PR parte - 2
 
 Levantando o ambiente localmente.
+
+
+git clone 
+cd devsecops/codigo/observabilidade
+sudo docker compose up -d --build
+
+
+Acessar a aplicação no navegador em http://<IP_DA_SUA_VM>:5000 e realize múltiplas tentativas de login com senhas incorretas seguidas para gerar os logs de falha simulando a força bruta.
+
+Consultar Logs no Grafana
+Acesse o painel em http://<IP_DA_SUA_VM>:3000. Navegue até a aba "Explore", selecione a fonte de dados "Loki" e execute suas consultas LogQL (ex: {job="taskflow"}) para identificar o IP ofensor.
+
+Documentar Evidências
+Capture as telas do Grafana mostrando as falhas de login mapeadas e insira essas evidências, junto com as queries utilizadas, nos arquivos docs/observabilidade.md e docs/runbook-login-bruteforce.md já criados.

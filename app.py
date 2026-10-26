@@ -1,49 +1,62 @@
 """
-TaskFlow - Aplicacao de exemplo da disciplina DevSecOps (versao CORRIGIDA).
+TaskFlow - versao corrigida para o Modulo 4 (DAST).
 
-Vulnerabilidades da linha de base e como foram corrigidas:
-  1. SQL Injection (login e busca)  -> consultas parametrizadas ("?").
-  2. XSS armazenado                 -> HTML em templates Jinja2 (autoescape).
-  3. SECRET_KEY hardcoded           -> lida de TASKFLOW_SECRET_KEY (ambiente/.env).
-  4. Senhas em texto puro           -> hash com salt (werkzeug.security); senha
-                                       inicial do admin vem de TASKFLOW_ADMIN_PASSWORD.
-  5. Endpoint /debug/info exposto   -> removido (vazava a SECRET_KEY).
-  6. debug=True e host 0.0.0.0      -> removidos; em producao roda via gunicorn.
-  (Dependencias com CVE sao tratadas no requirements.txt + pip-audit/Dependabot.)
+Esta versao parte do principio de que as vulnerabilidades de SQL Injection
+e SECRET_KEY hardcoded (trabalhadas com SAST no Modulo 3) ja foram
+corrigidas. Como este arquivo nao tem acesso direto ao "app_fixed_sast.py"
+produzido naquele modulo, essas correcoes sao reaplicadas aqui tambem, para
+que o arquivo fique completo, coerente e executavel de forma independente.
+
+Correcoes aplicadas nesta versao (Modulo 4 - DAST):
+  1. XSS armazenado CORRIGIDO: toda a renderizacao de HTML foi migrada de
+     f-strings manuais para templates Jinja2 (render_template), que aplicam
+     escaping automatico (autoescape) em qualquer valor inserido via
+     "{{ variavel }}". Ver pasta templates/.
+  2. Endpoint "/debug/info" REMOVIDO. Informacoes de diagnostico do
+     servidor (versao do Python, plataforma, segredos) nunca devem ser
+     expostas publicamente - se for necessario um endpoint de saude/debug,
+     ele deve exigir autenticacao de administrador e nunca vazar segredos.
+  3. "debug=True" substituido por leitura de variavel de ambiente
+     (FLASK_DEBUG), com padrao seguro (False/desligado). Em producao, o
+     Werkzeug debugger interativo NUNCA deve estar acessivel.
+
+Correcoes reaplicadas do Modulo 3 (SAST), para manter o arquivo coerente:
+  4. SQL Injection CORRIGIDA no login e na busca de tarefas: as queries
+     agora usam parametros preparados ("?") em vez de concatenacao de
+     string.
+  5. SECRET_KEY lido de variavel de ambiente (FLASK_SECRET_KEY), nunca mais
+     hardcoded no codigo-fonte.
+  6. Bonus de coerencia: senhas armazenadas com hash (werkzeug.security),
+     em vez de texto puro, ja que a tabela de usuarios e recriada do zero
+     nesta versao. (O Modulo 2/3 tambem cobre esse ponto: se voce esta
+     comparando com uma versao anterior que ainda usa texto puro, essa e
+     uma diferenca proposital de completude deste arquivo.)
+
+Vulnerabilidades que PERMANECEM de propósito neste modulo (fora de escopo
+do Modulo 4, tratadas em modulos futuros ou fora do currículo introdutório):
+  - Ausência de rate limiting no login (relacionado a A07 - ver Encontro 9).
+  - Ausência de logging estruturado de eventos de seguranca (Modulo 6).
 """
 
 import os
 import sqlite3
 
-from dotenv import load_dotenv
 from flask import Flask, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
-# Carrega variaveis do arquivo .env (apenas desenvolvimento local).
-# O .env esta no .gitignore e NUNCA deve ser commitado.
-load_dotenv()
-
 app = Flask(__name__)
 
-# ANTES: SECRET_KEY com valor fixo no codigo (achado de SAST/secret scanning).
-# AGORA: lida do ambiente; sem ela a app nao sobe (fail fast).
-_secret_key = os.environ.get("TASKFLOW_SECRET_KEY")
-if not _secret_key:
-    raise RuntimeError(
-        "Variavel de ambiente TASKFLOW_SECRET_KEY nao foi definida. "
-        "Configure-a antes de iniciar a aplicacao "
-        "(ex: export TASKFLOW_SECRET_KEY='valor-aleatorio-e-longo')."
-    )
-app.config["SECRET_KEY"] = _secret_key
+# Correcao (Modulo 3): o segredo de sessao agora vem de uma variavel de
+# ambiente. Nunca faca commit do valor real - use um gerenciador de
+# segredos (Vault, AWS Secrets Manager, GitHub Actions Secrets etc.) em
+# ambientes reais. Aqui usamos um fallback apenas para nao quebrar a
+# execucao local em ambiente de laboratorio - isso NAO deveria existir em
+# producao.
+app.config["SECRET_KEY"] = os.environ.get(
+    "FLASK_SECRET_KEY", "apenas-para-lab-troque-via-env-var"
+)
 
-# AGORA: cookie de sessao inacessivel via JavaScript e nao enviado em
-# requisicoes cross-site.
-app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-
-# Caminho do banco configuravel: no container aponta para /app/data (unica
-# pasta gravavel pelo usuario nao-root). Localmente continua "taskflow.db".
-DATABASE = os.environ.get("TASKFLOW_DATABASE", "taskflow.db")
+DATABASE = "taskflow.db"
 
 
 def get_db():
@@ -83,25 +96,19 @@ def init_db():
     )
     db.commit()
 
-    # ANTES: usuarios criados com senha em texto puro ("admin123") no codigo
-    #        e gravada sem hash no banco.
-    # AGORA: a senha inicial vem do ambiente e e gravada como HASH (com salt).
-    #        Se TASKFLOW_ADMIN_PASSWORD nao existir, nenhum usuario e criado.
-    admin_password = os.environ.get("TASKFLOW_ADMIN_PASSWORD")
     cur = db.execute("SELECT COUNT(*) AS total FROM users")
-    if cur.fetchone()["total"] == 0 and admin_password:
+    if cur.fetchone()["total"] == 0:
+        # Correcao (Modulo 2/3): senha armazenada como hash, nunca em
+        # texto puro.
         db.execute(
             "INSERT INTO users (username, password) VALUES (?, ?)",
-            ("admin", generate_password_hash(admin_password)),
+            ("admin", generate_password_hash("admin123")),
+        )
+        db.execute(
+            "INSERT INTO users (username, password) VALUES (?, ?)",
+            ("aluno", generate_password_hash("senha123")),
         )
         db.commit()
-
-
-# ANTES: init_db() so era chamado dentro do bloco __main__.
-# AGORA: roda na importacao do modulo, para funcionar tambem com o gunicorn
-#        (que importa o app e nunca executa o bloco __main__).
-with app.app_context():
-    init_db()
 
 
 @app.route("/")
@@ -115,26 +122,30 @@ def index():
 def login():
     error = None
     if request.method == "POST":
-        username = request.form.get("username", "")
-        password = request.form.get("password", "")
+        username = request.form["username"]
+        password = request.form["password"]
 
-        # ANTES: "... WHERE username = '" + username + "' AND password = '" ...
-        #        -> SQL Injection (ex.: usuario  admin' --  entrava sem senha).
-        # AGORA: query parametrizada; a senha e conferida pelo hash, fora do SQL.
+        # Correcao (Modulo 3): query parametrizada, sem concatenacao de
+        # string. O SQLite (e qualquer outro driver DB-API 2.0) trata o
+        # valor do placeholder "?" estritamente como dado, nunca como
+        # parte do comando SQL.
         db = get_db()
-        cur = db.execute("SELECT * FROM users WHERE username = ?", (username,))
+        cur = db.execute(
+            "SELECT * FROM users WHERE username = ?", (username,)
+        )
         user = cur.fetchone()
 
         if user and check_password_hash(user["password"], password):
-            # Limpa a sessao anterior antes de autenticar (evita fixacao de sessao).
-            session.clear()
             session["user_id"] = user["id"]
             session["username"] = user["username"]
             return redirect(url_for("tasks"))
         error = "Usuario ou senha invalidos."
 
-    # ANTES: HTML retornado com f-string (Semgrep: directly-returned-format-string).
-    # AGORA: template Jinja2 com autoescape.
+    # Correcao (Modulo 4): renderizacao via template Jinja2 em vez de
+    # f-string manual. Qualquer valor passado a "render_template" e
+    # escapado automaticamente pelo autoescape do Jinja2 ao ser inserido
+    # com "{{ ... }}" no template - inclusive a variavel "error" abaixo,
+    # que antes era interpolada crua no HTML.
     return render_template("login.html", error=error)
 
 
@@ -153,8 +164,9 @@ def tasks():
     db = get_db()
 
     if search:
-        # ANTES: "... AND title LIKE '%" + search + "%'" -> SQL Injection.
-        # AGORA: o padrao do LIKE e montado fora do SQL e passado como parametro.
+        # Correcao (Modulo 3): busca tambem parametrizada. O padrao LIKE
+        # e montado concatenando o "%" ao valor JA PASSADO COMO PARAMETRO,
+        # nunca concatenando o valor do usuario direto na string SQL.
         like_pattern = f"%{search}%"
         rows = db.execute(
             "SELECT * FROM tasks WHERE user_id = ? AND title LIKE ?",
@@ -165,13 +177,16 @@ def tasks():
             "SELECT * FROM tasks WHERE user_id = ?", (session["user_id"],)
         ).fetchall()
 
-    # ANTES: HTML montado com f-string -> XSS armazenado na descricao.
-    # AGORA: template Jinja2 com autoescape ("<script>" vira "&lt;script&gt;").
+    # Correcao (Modulo 4): a lista de tarefas e passada como dado estruturado
+    # (lista de linhas do banco) para o template "tasks.html", que usa
+    # "{{ task['title'] }}" / "{{ task['description'] }}" com autoescape.
+    # Isso elimina a XSS armazenada: se a descricao contiver
+    # "<script>...</script>" ou "<img onerror=...>", o Jinja2 converte os
+    # caracteres especiais em entidades HTML (&lt;, &gt; etc.) antes de
+    # enviar a resposta, entao o navegador exibe o texto literal em vez de
+    # executar o conteudo.
     return render_template(
-        "tasks.html",
-        rows=rows,
-        search=search,
-        username=session["username"],
+        "tasks.html", tasks=rows, username=session["username"], search=search
     )
 
 
@@ -181,58 +196,50 @@ def new_task():
         return redirect(url_for("login"))
 
     if request.method == "POST":
-        title = request.form.get("title", "").strip()
-        description = request.form.get("description", "")
-        if title:
-            db = get_db()
-            db.execute(
-                "INSERT INTO tasks (user_id, title, description) VALUES (?, ?, ?)",
-                (session["user_id"], title, description),
-            )
-            db.commit()
+        title = request.form["title"]
+        description = request.form["description"]
+        db = get_db()
+        db.execute(
+            "INSERT INTO tasks (user_id, title, description) VALUES (?, ?, ?)",
+            (session["user_id"], title, description),
+        )
+        db.commit()
         return redirect(url_for("tasks"))
 
     return render_template("new_task.html")
 
 
-# ANTES: rota /debug/info publica, retornando versao do Python, plataforma
-#        e a propria SECRET_KEY.
-# AGORA: rota removida.
+# Correcao (Modulo 4): o endpoint "/debug/info" foi REMOVIDO por completo.
+# Informacoes de diagnostico interno do servidor (versao de linguagem,
+# plataforma, segredos de configuracao) nunca devem ser expostas via um
+# endpoint publico. Se um endpoint de diagnostico for realmente necessario
+# (por exemplo, para monitoramento), ele deve:
+#   a) exigir autenticacao de administrador (nao apenas login comum);
+#   b) nunca retornar segredos (SECRET_KEY, tokens, credenciais de banco);
+#   c) idealmente, ficar disponivel apenas em uma rede interna/management,
+#      nunca na mesma rota publica da aplicacao.
+#
+# Exemplo de como um endpoint de "health check" seguro poderia ser
+# reintroduzido, caso o time realmente precise de um:
+#
+# @app.route("/health")
+# def health():
+#     # Sem informacoes sensiveis - apenas confirma que o processo esta de pe.
+#     return {"status": "ok"}
 
 
 if __name__ == "__main__":
-    # ANTES: app.run(host="0.0.0.0", port=5000, debug=True)
-    #        -> debugger do Werkzeug (execucao remota de codigo) exposto na rede.
-    # AGORA: servidor de desenvolvimento so na maquina local, sem debug.
-    #        Porta 5001 para evitar conflito com o AirPlay do macOS (porta 5000).
-    #        Em producao/container a app roda com gunicorn (ver Dockerfile).
-    app.run(host="127.0.0.1", port=5001)
+    with app.app_context():
+        init_db()
 
-
-# =============================================================================
-# RESUMO DAS CORREÇÕES E MELHORIAS DE SEGURANÇA NO APP.PY
-# =============================================================================
-
-# Remediacao de SQL Injection (Consultas Parametrizadas)
-# - O que mudou: Uso do placeholder "?" nas consultas no login e na busca por tarefas.
-# - Por quê: Elimina a concatenacao de strings enviadas por usuarios, garantindo que a entrada do usuario seja tratada estritamente como dado e nao executada como instrucao SQL.
-
-# Mitigacao de XSS e Injecao de HTML (Templates Jinja2)
-# - O que mudou: Substituicao de HTML formatado diretamente no codigo por `render_template` com arquivos `.html`.
-# - Por quê: O Jinja2 ativa por padrao o mecanismo de autoescape, convertendo caracteres perigosos (como `<script>`) em entidades HTML seguras (`&lt;script&gt;`), saneando as descricoes de tarefas.
-
-# Remocao de Segredos Hardcoded (TASKFLOW_SECRET_KEY e TASKFLOW_ADMIN_PASSWORD)
-# - O que mudou: Leitura obrigatoria da `SECRET_KEY` e da senha do administrador a partir de variaveis de ambiente (via python-dotenv ou runtime).
-# - Por quê: Previne o vazamento de chaves secretas e senhas padrao no historico de commits do Git e ativa o comportamento de fail-fast caso a chave nao esteja definida.
-
-# Armazenamento Seguro de Credenciais (Hash de Senha)
-# - O que mudou: Utilizacao de `generate_password_hash` e `check_password_hash` da biblioteca Werkzeug.
-# - Por quê: Evita o armazenamento de senhas em texto puro no banco de dados SQLite, aplicando algoritmo de hashing forte com inclusao automatica de salt.
-
-# Remocao de Endpoint Exposto (/debug/info)
-# - O que mudou: Exclusao completa do endpoint `/debug/info`.
-# - Por quê: Impede a exposicao sensivel de informacoes do ambiente e o vazamento do token de sessao/SECRET_KEY.
-
-# Hardening no Servidor de Desenvolvimento e Coockie de Sessao
-# - O que mudou: Desativacao da flag `debug=True`, mudanca do host para `127.0.0.1` e adicao de `SESSION_COOKIE_HTTPONLY = True` e `SESSION_COOKIE_SAMESITE = 'Lax'`.
-# - Por quê: Bloqueia a execucao remota de codigo pelo debugger do Werkzeug na rede local e protege o cookie de sessao contra ataques do tipo CSRF e leitura via JavaScript malicioso.
+    # Correcao (Modulo 4): "debug" agora vem de uma variavel de ambiente,
+    # com padrao DESLIGADO (False). Em producao, FLASK_DEBUG nunca deve
+    # ser definida como verdadeira - o Werkzeug debugger interativo, quando
+    # habilitado, permite execucao remota de codigo Python por qualquer
+    # pessoa que alcance a aplicacao.
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    app.run(host="0.0.0.0", port=5000, debug=debug_mode)

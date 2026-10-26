@@ -56,3 +56,5 @@ patch desta aplicação demonstrando o "antes" (vulnerável) e o "depois"
 
 
 Teste PR parte - 2
+
+Levantando o ambiente localmente.

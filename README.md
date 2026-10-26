@@ -22,8 +22,8 @@ Este código contém vulnerabilidades **intencionais** para fins didáticos
 
 ```bash
 # 1. Clonar e entrar na pasta
-git clone https://github.com/Tiagocamilos/taskflow_pos_2026.git
-cd taskflow_pos_2026
+git clone https://github.com/dhuberto/devsecops.git
+cd devsecops
 
 # 2. Ambiente virtual e dependências
 python3 -m venv .venv

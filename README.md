@@ -102,8 +102,7 @@ newgrp docker
 ```
 
 ```bash
-git clone 
-cd devsecops/codigo/observabilidade
+cd devsecops
 sudo docker compose up -d --build
 ```
 

@@ -16,16 +16,44 @@ Este código contém vulnerabilidades **intencionais** para fins didáticos
 
 ## Como executar localmente
 
+## 2. Rodar a aplicação localmente
+
+**Pré-requisitos:** Python 3.12 e Git.
+
 ```bash
-cd app-exemplo
+# 1. Clonar e entrar na pasta
+git clone https://github.com/Tiagocamilos/taskflow_pos_2026.git
+cd taskflow_pos_2026
+
+# 2. Ambiente virtual e dependências
 python3 -m venv .venv
-source .venv/bin/activate          # Windows: venv\Scripts\activate
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+
+# 3. Gerar a SECRET_KEY (copie o valor impresso)
+python -c "import secrets; print(secrets.token_hex(32))"
+
+# 4. Criar o .env a partir do modelo
+cp .env.example .env               # Windows: copy .env.example .env
+```
+
+Abra o `.env` e preencha (sem aspas e sem espaços ao redor do `=`):
+
+```text
+TASKFLOW_SECRET_KEY=valor-gerado-no-passo-3
+TASKFLOW_ADMIN_PASSWORD=uma-senha-que-voce-escolher
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres123
+POSTGRES_DB=db
+```
+
+```bash
+# 5. Subir a app
 python app.py
 ```
 
-A aplicação sobe em `http://localhost:5000`. Usuários de teste já vêm
-cadastrados no banco SQLite (`taskflow.db`, criado automaticamente):
+Acesse http://127.0.0.1:5001 e entre com o usuário `admin` e a senha definida
+em `TASKFLOW_ADMIN_PASSWORD`.
 
 | Usuário | Senha    |
 |---------|----------|

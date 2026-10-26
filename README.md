@@ -96,6 +96,10 @@ sudo apt install docker.io docker-compose-v2 -y
 
 # Adiciona seu usuário ao grupo docker (evita 'sudo' em cada comando)
 sudo usermod -aG docker $USER
+
+newgrp docker
+
+
 ```
 
 ```bash

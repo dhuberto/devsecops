@@ -60,6 +60,17 @@ Teste PR parte - 2
 Levantando o ambiente localmente.
 
 ```bash
+# Atualiza o índice de pacotes
+sudo apt update
+
+# Instala o motor do Docker e o plugin nativo do Docker Compose
+sudo apt install docker.io docker-compose-v2 -y
+
+# Adiciona seu usuário ao grupo docker (evita 'sudo' em cada comando)
+sudo usermod -aG docker $USER
+```
+
+```bash
 git clone 
 cd devsecops/codigo/observabilidade
 sudo docker compose up -d --build

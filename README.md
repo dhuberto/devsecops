@@ -59,11 +59,11 @@ Teste PR parte - 2
 
 Levantando o ambiente localmente.
 
-
+```bash
 git clone 
 cd devsecops/codigo/observabilidade
 sudo docker compose up -d --build
-
+```
 
 Acessar a aplicação no navegador em http://<IP_DA_SUA_VM>:5000 e realize múltiplas tentativas de login com senhas incorretas seguidas para gerar os logs de falha simulando a força bruta.
 

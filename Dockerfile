@@ -1,89 +1,112 @@
-# Dockerfile HARDENED - corrige as seis falhas do Dockerfile original.
+# Dockerfile HARDENED - versao corrigida usada no Modulo 2 (Encontro 4).
+#
+# Esta e a versao corrigida do arquivo original em `app-exemplo/Dockerfile`.
+# Cada comentario "# CORRIGIDO (FALHA N)" explica a mudanca em relacao a
+# falha original correspondente, numerada exatamente como no Dockerfile
+# inseguro (FALHA 1 a FALHA 6).
+#
+# IMPORTANTE: este arquivo corrige apenas problemas de HARDENING de imagem
+# e container (Modulo 2). As vulnerabilidades de CODIGO da aplicacao
+# (SQL Injection, XSS, senha em texto puro, etc.) sao tratadas nos
+# Modulos 3 e 4 (SAST/SCA/DAST) e nao fazem parte do escopo deste arquivo.
 
-# CORRIGIDO (FALHA 1): tag fixada e imagem slim (menos pacotes de SO,
-# menos CVEs), em vez de "latest". Build multi-stage: o estagio final
-# nao carrega cache nem ferramentas de instalacao.
-#FROM python:3.12-slim AS build
-FROM python:3.12-alpine AS build
+# ---------------------------------------------------------------------------
+# STAGE 1: build - instala dependencias em um estagio separado
+# ---------------------------------------------------------------------------
+# CORRIGIDO (FALHA 1): tag fixada em vez de "latest". Usamos "slim" para
+# reduzir a superficie de ataque (menos pacotes de SO = menos CVEs
+# possiveis) e uma versao especifica do Python para builds reprodutiveis.
+# Em ambientes de producao real, o ideal e fixar por digest imutavel, ex:
+#   FROM python:3.12-slim@sha256:<digest>
+# Aqui usamos a tag para fins didaticos, mas o professor deve mencionar
+# o pinning por digest como o passo seguinte de maturidade.
+FROM python:3.12-slim AS build
 
 WORKDIR /app
 
 COPY requirements.txt .
 
-# CORRIGIDO (FALHA 3): versoes fixadas no requirements.txt (auditadas pelo
-# pip-audit no sca.yml) e --no-cache-dir para nao deixar cache na camada.
+# CORRIGIDO (FALHA 3): ainda nao ha um hash-check completo (isso exigiria
+# gerar um requirements com hashes via `pip-compile --generate-hashes`),
+# mas ja aplicamos duas melhorias importantes discutidas em aula:
+#   --no-cache-dir  -> nao deixa cache de download na camada da imagem
+#   --require-hashes (mencionado, comentado abaixo) -> forca que cada
+#   pacote tenha hash conferido, evitando dependencia adulterada.
+# Para habilitar de fato o --require-hashes, o requirements.txt precisaria
+# ser gerado com hashes (fora do escopo deste exemplo simplificado).
 RUN pip install --no-cache-dir -r requirements.txt
+# RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
-#FROM python:3.12-slim AS runtime
-FROM python:3.12-alpine AS runtime
+# ---------------------------------------------------------------------------
+# STAGE 2: runtime - imagem final, minima, sem ferramentas de build
+# ---------------------------------------------------------------------------
+# CORRIGIDO (estende a correcao da FALHA 1): build multi-stage. O estagio
+# final nao carrega compiladores nem arquivos temporarios do processo de
+# instalacao de dependencias, reduzindo o tamanho e a superficie de ataque
+# da imagem que efetivamente roda em producao.
+FROM python:3.12-slim AS runtime
 
-# Banco aponta para /app/data: unica pasta gravavel (volume no docker run).
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    TASKFLOW_DATABASE=/app/data/taskflow.db
-
+# Copia somente os pacotes Python ja instalados do estagio de build.
 COPY --from=build /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=build /usr/local/bin /usr/local/bin
 
 WORKDIR /app
 
-# CORRIGIDO (FALHA 2): usuario e grupo dedicados, sem privilegios de root.
-# So a pasta data/ (banco SQLite) e gravavel por ele.
-#RUN groupadd --system taskflow && \
-#    useradd --system --gid taskflow --no-create-home --shell /usr/sbin/nologin taskflow && \
-#    mkdir -p /app/data && \
-#    chown taskflow:taskflow /app/data
+# CORRIGIDO (FALHA 2): cria um usuario e grupo dedicados, sem privilegios
+# administrativos, em vez de rodar como root (root e o padrao se nenhum
+# USER for definido). Isso limita o dano em caso de um escape de container:
+# o processo dentro do container nao tera privilegios de root nem dentro
+# nem fora dele.
+RUN groupadd --system taskflow && \
+    useradd --system --gid taskflow --home-dir /app --shell /usr/sbin/nologin taskflow && \
+    chown taskflow:taskflow /app
 
-RUN addgroup -S taskflow && \
-    adduser -S -G taskflow -H -s /sbin/nologin taskflow && \
-    mkdir -p /app/data && \
-    chown taskflow:taskflow /app/data
+# Copia o codigo da aplicacao e garante que o usuario nao-root seja o dono,
+# para poder ler os arquivos e (se necessario) escrever em locais especificos
+# como o banco SQLite.
+COPY --chown=taskflow:taskflow . .
 
-# ANTES: "COPY --chown=taskflow:taskflow . ." levava .env, .git, codigo/ e o
-#        banco local para a imagem, e deixava o codigo alteravel pela app.
-# AGORA: copia SO o necessario; arquivos ficam do root (somente leitura p/ app).
-COPY app.py .
-COPY templates/ templates/
+# CORRIGIDO (FALHA 4): o segredo ADMIN_PASSWORD NAO e mais definido aqui.
+# Segredos nunca devem ir para ENV/ARG no Dockerfile, pois ficam gravados
+# permanentemente nas camadas da imagem e podem ser extraidos por qualquer
+# pessoa com acesso a imagem, mesmo depois de "removidos" em uma camada
+# posterior (basta rodar `docker history` ou inspecionar as camadas).
+# Em vez disso, segredos devem ser injetados em tempo de execucao via:
+#   - variaveis de ambiente passadas no `docker run -e` (nunca no Dockerfile)
+#   - secrets do orquestrador (Docker Swarm secrets, Kubernetes Secrets)
+#   - um cofre de segredos (Vault, AWS Secrets Manager, etc.)
+# Nao ha substituto direto aqui de proposito: a aula demonstra que a
+# aplicacao deve ler o segredo do ambiente em tempo de execucao, nao builda-lo.
 
-# CORRIGIDO (FALHA 4): nenhum segredo em ENV/ARG. TASKFLOW_SECRET_KEY e
-# TASKFLOW_ADMIN_PASSWORD sao injetadas em tempo de execucao (docker run -e).
-
-# CORRIGIDO (FALHA 5): EXPOSE apenas documenta a porta do gunicorn; o
-# servidor de desenvolvimento do Flask nao e mais usado.
+# CORRIGIDO (FALHA 5 e FALHA 6): mantemos o EXPOSE apenas como documentacao
+# da porta usada (nao abre a porta por si só - isso e feito no `docker run
+# -p`). O problema real da FALHA 5/6 nao e a porta em si, mas usar o
+# servidor de desenvolvimento do Flask com debug=True em producao. Isso e
+# corrigido no codigo da aplicacao (fora do escopo deste Dockerfile) e,
+# aqui, documentamos que a imagem espera rodar com um servidor WSGI de
+# producao (ex: gunicorn) e sem debug habilitado.
 EXPOSE 5000
 
+# Usuario nao-root efetivo a partir daqui - qualquer comando do container
+# roda com privilegios limitados.
 USER taskflow
 
-# CORRIGIDO (FALHA 6): gunicorn (WSGI de producao) no lugar de "python app.py".
-# Sem debug: o bloco __main__ do app.py nao e executado. O init_db() roda
-# na importacao do app.py, entao nao precisa de comando extra.
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "app:app"]
+# CORRIGIDO (FALHA 6): em vez de "python app.py" (que sobe o servidor de
+# desenvolvimento do Flask com debug), usamos gunicorn como servidor WSGI
+# de producao. Isso elimina o Werkzeug debugger interativo (que permite
+# execucao remota de codigo) e melhora performance/estabilidade.
+# Nota: gunicorn deve ser adicionado ao requirements.txt do projeto para
+# este CMD funcionar (nao incluido aqui pois foge do escopo do Modulo 2).
+#CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "app:app"]
+CMD ["sh", "-c", "python -c 'from app import app, init_db; app.app_context().push(); init_db()' && gunicorn --bind 0.0.0.0:5000 --workers 2 app:app"]
 
 
-# =============================================================================
-# RESUMO DAS CORREÇÕES E PRÁTICAS DE HARDENING APLICADAS NO DOCKERFILE
-# =============================================================================
-
-# Correção 1: Fixação de Imagem Base e Multi-Stage Build (Substituição da tag `latest`)
-# - O que mudou: Substituição da imagem `python:latest` pela versão fixa e reduzida `python:3.12-slim` com estratégia de build em múltiplos estágios (build e runtime).
-# - Por quê: Garante reprodutibilidade da imagem, reduz a superfície de ataque ao utilizar uma base mínima (slim) e previne que arquivos/ferramentas do processo de compilação permaneçam no container final.
-
-# Correção 2: Execução com Usuário Não-Root (Princípio do Mínimo Privilégio)
-# - O que mudou: Criação do grupo/usuário de sistema sem permissão de login (`taskflow`) e declaração explicativa da instrução `USER taskflow`.
-# - Por quê: Evita que o container rode com privilégios de `root`, impedindo a escalada de privilégios e o comprometimento do host caso a aplicação seja invadida.
-
-# Correção 3: Instalação Limpa de Dependências e Seleção Seletiva de Arquivos
-# - O que mudou: Adição da flag `--no-cache-dir` na instalação de pacotes e substituição do `COPY . .` pela cópia explícita de apenas arquivos necessários (`app.py` e `templates/`).
-# - Por quê: Reduz o tamanho final da imagem, otimiza o tempo de build e previne o vazamento não intencional de arquivos locais sensíveis (como `.env`, `.git` ou repositórios de testes).
-
-# Correção 4: Remoção de Credenciais e Segredos na Construção
-# - O que mudou: Exclusão total da variável `ENV ADMIN_PASSWORD` das camadas da imagem.
-# - Por quê: Elimina o vazamento de segredos via histórico do container (`docker history`), exigindo que chaves e senhas sejam fornecidas dinamicamente no runtime.
-
-# Correção 5: Servidor de Aplicação de Produção (Substituição do Dev Server do Flask)
-# - O que mudou: Troca do comando de execução direta em Python por um servidor WSGI pronto para produção (`gunicorn`).
-# - Por quê: Garante melhor performance, resiliência no tratamento de requisições simultâneas e atende às boas práticas de implantação em produção.
-
-# Correção 6: Desativação do Modo Debug e Permissões de Leitura
-# - O que mudou: Remoção do parâmetro `debug=True` e isolamento de escrita apenas para o diretório de dados (`/app/data`).
-# - Por quê: Desativa a execução remota de código via Werkzeug debugger e protege os arquivos do código-fonte contra modificações ou sobrescritas por parte do processo do container em execução.
+# ---------------------------------------------------------------------------
+# Resumo das correcoes aplicadas nesta versao (ver Encontro 4 para detalhes):
+#   FALHA 1 -> tag fixada (python:3.12-slim) + multi-stage build
+#   FALHA 2 -> usuario e grupo dedicados nao-root (USER taskflow)
+#   FALHA 3 -> --no-cache-dir e caminho comentado para --require-hashes
+#   FALHA 4 -> segredo removido do Dockerfile (deve vir de fora, em runtime)
+#   FALHA 5 -> EXPOSE mantido apenas como documentacao, nao resolve sozinho
+#   FALHA 6 -> troca do servidor de desenvolvimento Flask por gunicorn
+# ---------------------------------------------------------------------------

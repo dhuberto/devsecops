@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>TaskFlow - Login</title>
+</head>
+<body>
+    {# 
+      O Jinja2 aplica autoescape automatico para todas as variaveis renderizadas via {{ ... }}.
+      Isso impede vulnerabilidades de XSS Refletido e Injecao de HTML na exibicao do erro.
+    #}
+    <h2>TaskFlow - Autenticação</h2>
+
+    {% if error %}
+        <p style="color: red;">{{ error }}</p>
+    {% endif %}
+
+    <form method="POST" action="/login">
+        <div>
+            <label for="username">Usuário:</label>
+            <input type="text" id="username" name="username" required autocomplete="off">
+        </div>
+        <br>
+        <div>
+            <label for="password">Senha:</label>
+            <input type="password" id="password" name="password" required>
+        </div>
+        <br>
+        <button type="submit">Entrar</button>
+    </form>
+</body>
+</html>

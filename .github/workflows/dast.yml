@@ -70,6 +70,8 @@ jobs:
         uses: zaproxy/action-baseline@v0.15.0
         with:
           target: "http://localhost:5000"
+          # Inserido o mapeamento para o arquivo de regras exigido pela atividade
+          rules_file_name: ".zap/rules.tsv"
           # "cmd_options" repassa flags direto para o zap-baseline.py.
           # "-a" faz o spidering tambem com o AJAX spider (util para apps
           # com bastante JavaScript); pode ser removido se nao for

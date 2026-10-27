@@ -14,83 +14,9 @@ Este código contém vulnerabilidades **intencionais** para fins didáticos
 - Reutilize o padrão de código (concatenação de SQL, senhas em texto puro,
   segredo hardcoded) em projetos reais.
 
-## Como executar localmente
-
-## 2. Rodar a aplicação localmente
-
-**Pré-requisitos:** Python 3.12 e Git.
-
-```bash
-# 1. Clonar e entrar na pasta
-git clone https://github.com/dhuberto/devsecops.git
-cd devsecops
-
-# 2. Ambiente virtual e dependências
-python3 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-
-# 3. Gerar a SECRET_KEY (copie o valor impresso)
-python -c "import secrets; print(secrets.token_hex(32))"
-
-# 4. Criar o .env a partir do modelo
-cp .env.example .env               # Windows: copy .env.example .env
-```
-
-Abra o `.env` e preencha (sem aspas e sem espaços ao redor do `=`):
-
-```text
-TASKFLOW_SECRET_KEY=valor-gerado-no-passo-3
-TASKFLOW_ADMIN_PASSWORD=uma-senha-que-voce-escolher
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postg
-```
-
-```bash
-# 5. Subir a app
-python app.py
-```
-
-Acesse http://127.0.0.1:5000 ou o IP da VM e entre com o usuário `admin` e a senha definida
-em `TASKFLOW_ADMIN_PASSWORD`.
-
-| Usuário | Senha    |
-|---------|----------|
-| admin   | admin123 |
-| aluno   | senha123 |
-
-## Como executar com Docker
-
-```bash
-# 1. Executado UMA ÚNICA VEZ no seu terminal do Ubuntu
-git clone https://github.com/dhuberto/devsecops.git
-cd devsecops
-
-# 2. Criar diretorio de logs
-mkdir -p logs && chmod 777 logs
-
-# 3. Gerar a SECRET_KEY (copie o valor impresso)
-python3 -c "import secrets; print(secrets.token_hex(32))"
-
-# 4. Criar o .env a partir do modelo
-cp .env.example .env               # Windows: copy .env.example .env
-```
-
-Abra o `vim .env` e preencha (sem aspas e sem espaços ao redor do `=`):
-
-```text
-TASKFLOW_SECRET_KEY=valor-gerado-no-passo-3
-TASKFLOW_ADMIN_PASSWORD=uma-senha-que-voce-escolher
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postg
-```
-```bash
-docker run -d --rm -p 5000:5000 --env-file .env -v $(pwd)/logs:/app/logs --name taskflow-app taskflow:vuln
-```
-```
 
 ## Estrutura
-
+```text
 devsecops/
 ├── .dockerignore                          # Define arquivos e pastas ignorados no contexto de build do Docker.
 ├── .env.example                           # Modelo de variáveis de ambiente documentado sem segredos reais.
@@ -129,14 +55,7 @@ devsecops/
 └── codigo/                                # Acervo didático com exemplos de código e evoluções dos módulos.
 ```
 
-Cada módulo cria, dentro da sua própria pasta `codigo/`, uma cópia ou um
-patch desta aplicação demonstrando o "antes" (vulnerável) e o "depois"
-(corrigido) referente ao tema daquele encontro.
-
-
-Teste PR parte - 2
-
-Levantando o ambiente localmente.
+## Como executar localmente
 
 ```bash
 # Atualiza o índice de pacotes
@@ -150,14 +69,50 @@ sudo usermod -aG docker $USER
 
 newgrp docker
 
+```
 
+
+## 2. Rodar a aplicação localmente
+
+**Pré-requisitos:** Python 3.12 e Git.
+
+```bash
+# 1. Clonar e entrar na pasta
+git clone https://github.com/dhuberto/devsecops.git
+cd devsecops
+
+# 2. Ambiente virtual e dependências
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+# 3. Gerar a SECRET_KEY (copie o valor impresso)
+python -c "import secrets; print(secrets.token_hex(32))"
+
+# 4. Criar o .env a partir do modelo
+cp .env.example .env               # Windows: copy .env.example .env
+```
+
+Abra o `.env` e preencha (sem aspas e sem espaços ao redor do `=`):
+
+```text
+TASKFLOW_SECRET_KEY=valor-gerado-no-passo-3
+TASKFLOW_ADMIN_PASSWORD=uma-senha-que-voce-escolher
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postg
+```
+
+```bash
+# 5. Subir a app
+python app.py
 ```
 
 ```bash
 cd ~/devsecops
 ```
 
-3.2. Escanear o Terraform e Compose com Checkov e TrivyNa raiz do repositório, rode as ferramentas de análise estática de infraestrutura:  
+### Escanear o Terraform e Compose com Checkov e TrivyNa raiz do repositório, rode as ferramentas de análise estática de infraestrutura:
+
 ```bash
 # Checkov
 docker run --rm -v $(pwd):/tf bridgecrew/checkov:latest -d /tf
@@ -169,6 +124,49 @@ docker run --rm -v $(pwd):/src aquasec/trivy config /src
 ```bash
 docker compose up -d
 ```
+
+## Como executar com Docker
+
+```bash
+# 1. Executado UMA ÚNICA VEZ no seu terminal do Ubuntu
+git clone https://github.com/dhuberto/devsecops.git
+cd devsecops
+
+# 2. Criar diretorio de logs
+mkdir -p logs && chmod 777 logs
+
+# 3. Gerar a SECRET_KEY (copie o valor impresso)
+python3 -c "import secrets; print(secrets.token_hex(32))"
+
+# 4. Criar o .env a partir do modelo
+cp .env.example .env               # Windows: copy .env.example .env
+```
+
+Abra o `vim .env` e preencha (sem aspas e sem espaços ao redor do `=`):
+
+```text
+TASKFLOW_SECRET_KEY=valor-gerado-no-passo-3
+TASKFLOW_ADMIN_PASSWORD=uma-senha-que-voce-escolher
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postg
+```
+```bash
+docker run -d --rm -p 5000:5000 --env-file .env -v $(pwd)/logs:/app/logs --name taskflow-app taskflow:vuln
+```
+
+
+Acesse http://127.0.0.1:5000 ou o IP da VM e entre com o usuário `admin` e a senha definida
+em `TASKFLOW_ADMIN_PASSWORD`.
+
+| Usuário | Senha    |
+|---------|----------|
+| admin   | admin123 |
+| aluno   | senha123 |
+
+Cada módulo cria, dentro da sua própria pasta `codigo/`, uma cópia ou um
+patch desta aplicação demonstrando o "antes" (vulnerável) e o "depois"
+(corrigido) referente ao tema daquele encontro.
+
 
 Acessar a aplicação no navegador em http://<IP_DA_SUA_VM>:5000 e realize múltiplas tentativas de login com senhas incorretas seguidas para gerar os logs de falha simulando a força bruta.
 

@@ -121,7 +121,12 @@ docker compose up -d
 Acessar a aplicação no navegador em http://<IP_DA_SUA_VM>:5000 e realize múltiplas tentativas de login com senhas incorretas seguidas para gerar os logs de falha simulando a força bruta.
 
 Consultar Logs no Grafana
-Acesse o painel em http://<IP_DA_SUA_VM>:3000. Navegue até a aba "Explore", selecione a fonte de dados "Loki" e execute suas consultas LogQL (ex: {job="taskflow"}) para identificar o IP ofensor.
+Acesse o painel em http://<IP_DA_SUA_VM>:3000. Navegue até a aba "Explore", selecione a fonte de dados "Loki" e execute suas consultas LogQL 
+ex: 
+```bash
+sum by (ip) (count_over_time({app="taskflow", event="login_attempt"} | json | result = "failure" [5m])))
+```
+para identificar o IP ofensor.
 
 Documentar Evidências
 Capture as telas do Grafana mostrando as falhas de login mapeadas e insira essas evidências, junto com as queries utilizadas, nos arquivos docs/observabilidade.md e docs/runbook-login-bruteforce.md já criados.

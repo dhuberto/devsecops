@@ -178,6 +178,7 @@ Para identificar o IP ofensor.
 ### Parando a aplicação
 ```bash
 docker stop taskflow-app
+docker rm -f taskflow-app
 ```
 
 ### parando o Grafana, loki e o promtail

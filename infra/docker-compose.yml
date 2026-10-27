@@ -2,28 +2,18 @@
 # ARQUIVO: infra/docker-compose.yml
 # DESCRIÇÃO: Orquestração segura multi-serviço (Web TaskFlow + PostgreSQL)
 # ==============================================================================
-version: '3.8'
 
-# ------------------------------------------------------------------------------
-# BLOCO 1: Definição de Redes Isoladas (Frontend e Backend)
-# ------------------------------------------------------------------------------
 networks:
   frontend:
     driver: bridge
   backend:
     driver: bridge
 
-# ------------------------------------------------------------------------------
-# BLOCO 2: Volumes Persistentes
-# ------------------------------------------------------------------------------
 volumes:
   taskflow_db_data:
 
-# ------------------------------------------------------------------------------
-# BLOCO 3: Serviços de Infraestrutura e Aplicação
-# ------------------------------------------------------------------------------
 services:
-  # Serviço de Banco de Dados PostgreSQL
+  # Banco de Dados PostgreSQL (Infraestrutura)
   db:
     image: postgres:15-alpine
     container_name: taskflow-db
@@ -32,10 +22,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taskflow_pass_secure}
       POSTGRES_DB: ${POSTGRES_DB:-taskflow_db}
     networks:
-      - backend # Conectado APENAS à rede backend isolada
+      - backend
     volumes:
-      - taskflow_db_data:/var/lib/postgresql/data # Persistência de dados do banco
-    # ATENÇÃO: A porta 5432 NÃO é exposta ao host para evitar acesso externo direto
+      - taskflow_db_data:/var/lib/postgresql/data
     deploy:
       resources:
         limits:
@@ -52,28 +41,26 @@ services:
   # Serviço Web TaskFlow
   web:
     build:
-      context: .. # Aponta para a pasta raiz (devsecops/) onde estão app.py e Dockerfile
+      context: ..
       dockerfile: Dockerfile
     image: taskflow:compose-secure
     container_name: taskflow-web
     ports:
       - "5000:5000"
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-taskflow_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taskflow_pass_secure}
-      POSTGRES_DB: ${POSTGRES_DB:-taskflow_db}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-taskflow_user}:${POSTGRES_PASSWORD:-taskflow_pass_secure}@db:5432/${POSTGRES_DB:-taskflow_db}
       TASKFLOW_SECRET_KEY: ${TASKFLOW_SECRET_KEY:-desenvolvimento-chave-temporaria-devsecops}
+      TASKFLOW_ADMIN_PASSWORD: ${TASKFLOW_ADMIN_PASSWORD:-admin123}
+      TASKFLOW_DB: /tmp/taskflow.db
       FLASK_DEBUG: "0"
     networks:
       - frontend
       - backend
-    read_only: true # Filesystem raiz como somente leitura
+    read_only: true
     tmpfs:
       - /tmp
       - /run
     volumes:
-      - ../logs:/app/logs # Monta diretório de logs da raiz para escrita segura
+      - ../logs:/app/logs
     deploy:
       resources:
         limits:
@@ -90,9 +77,3 @@ services:
         condition: service_healthy
     security_opt:
       - no-new-privileges:true
-
-# ==============================================================================
-# RESUMO: O arquivo assegura isolamento de rede, ausência de portas expostas no DB,
-# volume persistente no Postgres, contexto de build apontando para a raiz (..),
-# limites de CPU/Memória, filesystem read-only e verificação de saúde (healthcheck).
-# ==============================================================================

@@ -129,6 +129,7 @@ cd devsecops
 
 # 2. Criar diretorio de logs
 mkdir -p logs && chmod 777 logs
+sudo chmod -R 777 $(pwd)/logs
 
 # 3. Gerar a SECRET_KEY (copie o valor impresso)
 python3 -c "import secrets; print(secrets.token_hex(32))"

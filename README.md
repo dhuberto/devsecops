@@ -189,6 +189,24 @@ ex:
 ```
 Para identificar o IP ofensor.
 
+## Gerando evidencias: 
+
+### 1. Suba a aplicação vulnerável ou corrigida localmente
+```bash
+docker build -t taskflow:dast .
+docker run -d --name taskflow-dast -p 5000:5000 taskflow:dast
+```
+### 2. Execute o container do OWASP ZAP gerando o relatório na pasta local
+```bash
+docker run --rm -v $(pwd):/zap/wrk/:rw -t zaproxy/zap-stable zap-baseline.py \
+  -t http://host.docker.internal:5000 \
+  -g gen.conf -r report_dast.html -m report_dast.md
+```
+
+
+
+
+
 ## Limpando o ambiente
 ### Parando a aplicação
 ```bash

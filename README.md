@@ -122,7 +122,7 @@ docker run --rm -v $(pwd):/src aquasec/trivy config /src
 ```
 
 
-## Como executar com Docker
+## Como executar a aplicação com Docker
 
 ```bash
 # 1. Executado UMA ÚNICA VEZ no seu terminal do Ubuntu

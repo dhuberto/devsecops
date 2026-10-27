@@ -21,3 +21,20 @@
 ### Consulta 1: Agrupamento e contagem de falhas de login por IP de origem (OBRIGATÓRIA)
 ```logql
 sum by (ip) (count_over_time({job="taskflow"} | json | event="login_attempt" | result="failure" [5m]))
+
+# Documentação de Observabilidade e Consultas LogQL
+
+## 1. Estrutura de Logs da Aplicação
+A TaskFlow emite logs estruturados em formato JSON no arquivo `logs/taskflow.log`, contendo os seguintes campos fundamentais:
+* `timestamp`: Data/hora em padrão ISO-8601 UTC.
+* `level`: Severidade (`INFO`, `WARNING`, `ERROR`).
+* `request_id`: Identificador UUID único rastreável.
+* `ip`: IP de origem do cliente.
+* `user`: Nome de usuário tentando a autenticação.
+* `event`: Categoria do evento (`login_failure`, `login_success`, `task_created`).
+
+## 2. Consultas LogQL Utilizadas no Grafana
+
+### Consulta 1: Contagem de Falhas de Login por IP (Detecção de Força Bruta)
+```logql
+sum by (ip) (count_over_time({job="taskflow"} | json | event = "login_failure" [5m]))

@@ -89,7 +89,7 @@ pip install -r requirements.txt
 # 3. Gerar a SECRET_KEY (copie o valor impresso)
 python -c "import secrets; print(secrets.token_hex(32))"
 
-# 4. Criar o .env a partir do modelo
+# 4. Criar o vim .env a partir do modelo
 cp .env.example .env               # Windows: copy .env.example .env
 ```
 

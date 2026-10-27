@@ -46,4 +46,4 @@ services:
     depends_on:
       - loki
     networks:
-      - observabilidadevv
+      - observabilidade

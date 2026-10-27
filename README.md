@@ -115,7 +115,7 @@ docker run --rm -v $(pwd):/src aquasec/trivy config /src
 ```
 
 ```bash
-docker compose -f codigo/observabilidade/docker-compose.yml up -d
+docker compose up -d
 ```
 
 Acessar a aplicação no navegador em http://<IP_DA_SUA_VM>:5000 e realize múltiplas tentativas de login com senhas incorretas seguidas para gerar os logs de falha simulando a força bruta.

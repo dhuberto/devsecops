@@ -62,8 +62,13 @@ em `TASKFLOW_ADMIN_PASSWORD`.
 ## Como executar com Docker
 
 ```bash
+# 1. Executado UMA ÚNICA VEZ no seu terminal do Ubuntu
 git clone https://github.com/dhuberto/devsecops.git
 cd devsecops
+
+# 2. Criar diretorio de logs
+mkdir -p logs && chmod 777 logs
+
 # 3. Gerar a SECRET_KEY (copie o valor impresso)
 python3 -c "import secrets; print(secrets.token_hex(32))"
 
@@ -171,7 +176,7 @@ Consultar Logs no Grafana
 Acesse o painel em http://<IP_DA_SUA_VM>:3000. Navegue até a aba "Explore", selecione a fonte de dados "Loki" e execute suas consultas LogQL 
 ex: 
 ```bash
-sum by (ip) (count_over_time({app="taskflow", event="login_attempt"} | json | result = "failure" [5m]))
+{job="taskflow"} | json | event = "login_attempt" | result = "failure" | username = "admin"
 ```
 para identificar o IP ofensor.
 

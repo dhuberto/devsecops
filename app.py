@@ -452,7 +452,7 @@ def new_task():
 #        "python_version": sys.version,
 #        "platform": platform.platform(),
 #        "secret_key": app.config["SECRET_KEY"],
-    }
+#    }
 
 
 if __name__ == "__main__":

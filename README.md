@@ -190,6 +190,8 @@ docker stop taskflow-app
 docker compose down
 ```
 
-### Apagando diretório
+### Apagando diretório devsecops
+```bash
 cd ~
 rm -rf devsecops
+```

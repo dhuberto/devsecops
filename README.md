@@ -64,8 +64,7 @@ em `TASKFLOW_ADMIN_PASSWORD`.
 ```bash
 git clone https://github.com/dhuberto/devsecops.git
 cd devsecops
-docker build -t taskflow:vuln .
-docker run -p 5000:5000 taskflow:vuln
+docker run -d --rm -p 5000:5000 --env-file .env -v $(pwd)/logs:/app/logs --name taskflow-app taskflow:vuln
 ```
 
 ## Estrutura

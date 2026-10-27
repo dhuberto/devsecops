@@ -102,8 +102,8 @@ newgrp docker
 ```
 
 ```bash
-cd devsecops
-sudo docker compose up -d --build
+cd ~/devsecops
+docker compose -f codigo/observabilidade/docker-compose.yml up -d
 ```
 
 3.2. Escanear o Terraform e Compose com Checkov e TrivyNa raiz do repositório, rode as ferramentas de análise estática de infraestrutura:  

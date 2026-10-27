@@ -1,10 +1,12 @@
 # Arquivos e diretórios ignorados pelo controle de versão do Git.
 # Impede a persistência de segredos, ambientes virtuais e artefatos locais no repositório.
 
-.venv/
-__pycache__/
-taskflow.db
 .env
+*.db
+logs/
+*.tfstate
+*.tfstate.backup
+.terraform/
 
 
 # =============================================================================

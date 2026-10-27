@@ -172,10 +172,7 @@ ex:
 ```bash
 {job="taskflow"} | json | event = "login_attempt" | result = "failure" | username = "admin"
 ```
-para identificar o IP ofensor.
-
-Documentar Evidências
-Capture as telas do Grafana mostrando as falhas de login mapeadas e insira essas evidências, junto com as queries utilizadas, nos arquivos docs/observabilidade.md e docs/runbook-login-bruteforce.md já criados.
+Para identificar o IP ofensor.
 
 ## Limpando o ambiente
 ### Parando a aplicação

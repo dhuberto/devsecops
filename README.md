@@ -107,13 +107,11 @@ POSTGRES_PASSWORD=postg
 python app.py
 ```
 
-```bash
-cd ~/devsecops
-```
-
 ### Escanear o Terraform e Compose com Checkov e TrivyNa raiz do repositório, rode as ferramentas de análise estática de infraestrutura:
 
 ```bash
+cd ~/devsecops
+
 # Checkov
 docker run --rm -v $(pwd):/tf bridgecrew/checkov:latest -d /tf
 

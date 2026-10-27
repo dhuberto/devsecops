@@ -429,29 +429,29 @@ def new_task():
     """
 
 
-@app.route("/debug/info")
-def debug_info():
+# @app.route("/debug/info")
+# def debug_info():
     # Vulnerabilidade mantida de proposito - endpoint de debug exposto
     # sem autenticacao (ver app-exemplo/app.py). Logamos o acesso a ele
     # com nivel WARNING, pois e um recurso sensivel que nunca deveria
     # ser publico.
-    import platform
-    import sys
+  #  import platform
+  #  import sys
 
-    logger.warning(
-        "acesso ao endpoint de debug",
-        extra={
-            "event": "sensitive_endpoint_accessed",
-            "path": "/debug/info",
-            "ip": request.remote_addr,
-            "request_id": g.get("request_id"),
-        },
-    )
-
-    return {
-        "python_version": sys.version,
-        "platform": platform.platform(),
-        "secret_key": app.config["SECRET_KEY"],
+  #  logger.warning(
+   #     "acesso ao endpoint de debug",
+   #     extra={
+   #         "event": "sensitive_endpoint_accessed",
+   #         "path": "/debug/info",
+   #         "ip": request.remote_addr,
+   #         "request_id": g.get("request_id"),
+   #     },
+   # )
+#
+#    return {
+#        "python_version": sys.version,
+#        "platform": platform.platform(),
+#        "secret_key": app.config["SECRET_KEY"],
     }
 
 

@@ -81,4 +81,3 @@ services:
 networks:
   observabilidade:
     driver: bridge
-v

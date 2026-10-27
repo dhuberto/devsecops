@@ -1,6 +1,6 @@
 # ==============================================================================
-# ARQUIVO: docker-compose.yml
-# DESCRIÇÃO: Orquestração segura multi-serviço (Web + PostgreSQL + Observabilidade)
+# ARQUIVO: infra/docker-compose.yml
+# DESCRIÇÃO: Orquestração segura multi-serviço (Web TaskFlow + PostgreSQL)
 # ==============================================================================
 version: '3.8'
 
@@ -11,10 +11,16 @@ networks:
   frontend:
     driver: bridge
   backend:
-    internal: true # Sem acesso à internet direta ou exposição externa inadvertida
+    driver: bridge
 
 # ------------------------------------------------------------------------------
-# BLOCO 2: Serviços de Infraestrutura e Aplicação
+# BLOCO 2: Volumes Persistentes
+# ------------------------------------------------------------------------------
+volumes:
+  taskflow_db_data:
+
+# ------------------------------------------------------------------------------
+# BLOCO 3: Serviços de Infraestrutura e Aplicação
 # ------------------------------------------------------------------------------
 services:
   # Serviço de Banco de Dados PostgreSQL
@@ -27,6 +33,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-taskflow_db}
     networks:
       - backend # Conectado APENAS à rede backend isolada
+    volumes:
+      - taskflow_db_data:/var/lib/postgresql/data # Persistência de dados do banco
     # ATENÇÃO: A porta 5432 NÃO é exposta ao host para evitar acesso externo direto
     deploy:
       resources:
@@ -34,7 +42,7 @@ services:
           cpus: '0.50'
           memory: 256M
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-taskflow_user}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-taskflow_user} -d ${POSTGRES_DB:-taskflow_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -43,12 +51,19 @@ services:
 
   # Serviço Web TaskFlow
   web:
-    build: .
+    build:
+      context: .. # Aponta para a pasta raiz (devsecops/) onde estão app.py e Dockerfile
+      dockerfile: Dockerfile
+    image: taskflow:compose-secure
     container_name: taskflow-web
     ports:
       - "5000:5000"
     environment:
-      TASKFLOW_SECRET_KEY: ${TASKFLOW_SECRET_KEY}
+      POSTGRES_USER: ${POSTGRES_USER:-taskflow_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taskflow_pass_secure}
+      POSTGRES_DB: ${POSTGRES_DB:-taskflow_db}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-taskflow_user}:${POSTGRES_PASSWORD:-taskflow_pass_secure}@db:5432/${POSTGRES_DB:-taskflow_db}
+      TASKFLOW_SECRET_KEY: ${TASKFLOW_SECRET_KEY:-desenvolvimento-chave-temporaria-devsecops}
       FLASK_DEBUG: "0"
     networks:
       - frontend
@@ -58,7 +73,7 @@ services:
       - /tmp
       - /run
     volumes:
-      - ./logs:/app/logs # Volume montado especificamente para escrita de logs
+      - ../logs:/app/logs # Monta diretório de logs da raiz para escrita segura
     deploy:
       resources:
         limits:
@@ -69,6 +84,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+      start_period: 10s
     depends_on:
       db:
         condition: service_healthy
@@ -77,5 +93,6 @@ services:
 
 # ==============================================================================
 # RESUMO: O arquivo assegura isolamento de rede, ausência de portas expostas no DB,
+# volume persistente no Postgres, contexto de build apontando para a raiz (..),
 # limites de CPU/Memória, filesystem read-only e verificação de saúde (healthcheck).
 # ==============================================================================

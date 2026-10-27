@@ -37,5 +37,10 @@ sum by (ip) (count_over_time({job="taskflow"} | json | event = "login_failure" [
 ### Consulta 1: Agrupamento e contagem de falhas de login por IP de origem (OBRIGATÓRIA)
 ```logql
 sum by (ip) (count_over_time({job="taskflow"} | json | event="login_attempt" | result="failure" [5m]))
-
+```
+### Script de força bruta
+```bash
+curl -s -X POST http://localhost:5000/login -d "username=admin&password=errada"
+for i in {1..20}; do   curl -s -X POST http://localhost:5000/login     -d "username=admin&password=wrongpassword$i" > /dev/null;   echo "Tentativa $i enviada.";   sleep 0.2; done
+```
 

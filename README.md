@@ -62,7 +62,8 @@ em `TASKFLOW_ADMIN_PASSWORD`.
 ## Como executar com Docker
 
 ```bash
-cd app-exemplo
+git clone https://github.com/dhuberto/devsecops.git
+cd devsecops
 docker build -t taskflow:vuln .
 docker run -p 5000:5000 taskflow:vuln
 ```

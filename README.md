@@ -156,7 +156,7 @@ Consultar Logs no Grafana
 Acesse o painel em http://<IP_DA_SUA_VM>:3000. Navegue até a aba "Explore", selecione a fonte de dados "Loki" e execute suas consultas LogQL 
 ex: 
 ```bash
-sum by (ip) (count_over_time({app="taskflow", event="login_attempt"} | json | result = "failure" [5m])))
+sum by (ip) (count_over_time({app="taskflow", event="login_attempt"} | json | result = "failure" [5m]))
 ```
 para identificar o IP ofensor.
 

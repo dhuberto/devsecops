@@ -70,11 +70,42 @@ docker run -p 5000:5000 taskflow:vuln
 ## Estrutura
 
 ```
-app-exemplo/
-├── app.py              # Aplicação Flask (versão vulnerável, linha de base)
-├── requirements.txt    # Dependências com CVEs conhecidas (uso proposital)
-├── Dockerfile           # Dockerfile inseguro (uso no Módulo 2 - Hardening)
-└── README.md            # Este arquivo
+devsecops/
+├── .dockerignore                          # Define arquivos e pastas ignorados no contexto de build do Docker[cite: 34].
+├── .env.example                           # Modelo de variáveis de ambiente documentado sem segredos reais[cite: 2, 182].
+├── .gitignore                             # Impede o commit de arquivos sensíveis, temporários ou do ambiente local[cite: 2, 34, 189].
+├── .github/                               # Diretório de configurações e automações da plataforma GitHub.
+│   ├── dependabot.yml                     # Configuração para monitoramento e atualização automática de dependências[cite: 62, 75].
+│   └── workflows/                         # Pipelines de CI/CD executadas via GitHub Actions[cite: 2, 222].
+│       ├── ci.yml                         # Gate de CI para análise estática de qualidade e linting (Ruff)[cite: 222].
+│       ├── container.yml                  # Build da imagem, varredura de vulnerabilidades (Trivy) e smoke test[cite: 2, 40, 48].
+│       ├── dast.yml                       # Pipeline de análise dinâmica de segurança usando OWASP ZAP Baseline[cite: 2, 170, 171].
+│       ├── iac-scan.yml                   # Varredura de segurança em arquivos Terraform e Docker Compose (Checkov/Trivy)[cite: 2, 208, 209].
+│       ├── sast.yml                       # Análise estática de código (Semgrep) e varredura de segredos (Gitleaks)[cite: 64, 80].
+│       └── sca.yml                        # Auditoria de vulnerabilidades em bibliotecas Python (pip-audit)[cite: 60, 77].
+├── .zap/
+│   └── rules.tsv                          # Tabela de regras e tratamentos de alertas do OWASP ZAP[cite: 2].
+├── app.py                                 # Código da aplicação Flask (TaskFlow) instrumentado com logs estruturados[cite: 1, 2, 54].
+├── Dockerfile                             # Script multi-stage build com usuário não-root para geração da imagem segura[cite: 2, 28, 31, 33, 45].
+├── docker-compose.yml                     # Orquestração local da stack de observabilidade (Grafana + Loki + Promtail)[cite: 2].
+├── promtail-config.yml                    # Regras de coleta e envio de logs JSON para o banco Loki[cite: 2].
+├── requirements.txt                       # Lista de dependências Python com versões auditadas sem CVEs[cite: 54, 69].
+├── README.md                              # Documentação principal com instruções de execução e arquitetura[cite: 2, 223].
+├── infra/                                 # Manifestos de Infraestrutura como Código (IaC)[cite: 2, 182, 218].
+│   ├── docker-compose.yml                 # Orquestração multi-container da app web com banco PostgreSQL isolado[cite: 2, 182, 190].
+│   └── main.tf                            # Manifesto Terraform (HCL) com configurações de segurança da AWS[cite: 2, 218].
+├── grafana-provisioning/
+│   └── datasources/
+│       └── loki.yml                       # Provisionamento automático da fonte de dados Loki no Grafana[cite: 2].
+├── templates/                             # Templates HTML/Jinja2 com autoescape ativado[cite: 1, 146, 166].
+│   ├── login.html                         # Interface de autenticação tratada contra injeções refletidas[cite: 1, 166].
+│   ├── new_task.html                      # Formulário para cadastro de tarefas[cite: 1, 166].
+│   └── tasks.html                         # Painel de tarefas protegido contra XSS armazenado[cite: 1, 146, 167].
+├── docs/                                  # Relatórios técnicos e documentações da atividade[cite: 2].
+│   ├── dast.md                            # Relatório do scan dinâmico ZAP (Antes x Depois) e OWASP Top 10[cite: 2, 138].
+│   ├── observabilidade.md                 # Documentação de consultas LogQL no Grafana (ex: falhas de login)[cite: 2].
+│   └── runbook-login-bruteforce.md        # Plano de resposta a incidentes de força bruta baseado no NIST SP 800-61[cite: 2].
+└── codigo/                                # Acervo didático com exemplos de código e evoluções dos módulos[cite: 1, 45, 165, 185, 214, 225].
 ```
 
 Cada módulo cria, dentro da sua própria pasta `codigo/`, uma cópia ou um

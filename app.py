@@ -32,7 +32,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 SQLITE_PATH = os.environ.get("TASKFLOW_DB", "taskflow.db")
 
 # ------------------------------------------------------------------------------
-# BLOCO 2: Configuração do Logging Estruturado em JSON (Módulo 6 / Observabilidade)
+# BLOCO 2: Configuração do Logging Estruturado em JSON (Observabilidade)
 # ------------------------------------------------------------------------------
 class JSONFormatter(logging.Formatter):
     """Formatador de logs em formato JSON estruturado para coleta pelo Promtail/Loki."""
@@ -47,12 +47,10 @@ class JSONFormatter(logging.Formatter):
             "ip": getattr(g, "client_ip", "127.0.0.1"),
             "user": session.get("username", "anonymous") if session and "username" in session else "anonymous"
         }
-        # Mescla atributos extras na raiz do JSON para suporte a buscas em LogQL no Grafana
         if hasattr(record, "extra_data"):
             log_data.update(record.extra_data)
         return json.dumps(log_data)
 
-# Garante o diretório de logs para gravação
 os.makedirs("logs", exist_ok=True)
 file_handler = logging.FileHandler("logs/taskflow.log")
 file_handler.setFormatter(JSONFormatter())
@@ -69,7 +67,6 @@ logger.addHandler(console_handler)
 # BLOCO 3: Middlewares, Request ID e Gestão de Conexão de Banco de Dados Híbrida
 # ------------------------------------------------------------------------------
 def get_db():
-    """Retorna a conexão ativa com o banco (PostgreSQL se DATABASE_URL estiver presente, senão SQLite)."""
     if "db" not in g:
         if DATABASE_URL:
             import psycopg2
@@ -82,29 +79,23 @@ def get_db():
 
 @app.teardown_appcontext
 def close_db(error):
-    """Encerra a conexão com o banco ao finalizar o contexto da requisição."""
     db = g.pop("db", None)
     if db is not None:
         db.close()
 
 @app.before_request
 def before_request():
-    """Rastreia cada requisição injetando Request ID único e IP do cliente."""
     g.request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
     g.client_ip = request.remote_addr or request.headers.get("X-Forwarded-For", "127.0.0.1")
 
 def log_event(event_type, message, extra=None):
-    """Auxiliar para emitir logs sanitizados sem expor senhas ou tokens."""
     extra_info = {"event": event_type}
     if extra:
-        # Higiene de dados sensíveis para não persistir senhas em texto puro nos logs
         sanitized_extra = {k: v for k, v in extra.items() if k.lower() not in ["password", "token", "secret", "cookie"]}
         extra_info.update(sanitized_extra)
-    
     logger.info(message, extra={"extra_data": extra_info})
 
 def init_db():
-    """Inicializa as tabelas no PostgreSQL ou SQLite e cria o usuário admin padrão."""
     admin_pass = os.environ.get("TASKFLOW_ADMIN_PASSWORD", "admin123")
     hashed_pass = generate_password_hash(admin_pass)
 
@@ -158,4 +149,114 @@ def init_db():
         db.commit()
         db.close()
 
-# Executa inicialização do banco dentro do contexto da aplicação
+with app.app_context():
+    init_db()
+
+# ------------------------------------------------------------------------------
+# BLOCO 4: Rotas da Aplicação
+# ------------------------------------------------------------------------------
+@app.route("/")
+def index():
+    if "user_id" in session:
+        return redirect(url_for("tasks"))
+    return redirect(url_for("login"))
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        
+        db = get_db()
+        if DATABASE_URL:
+            cur = db.cursor()
+            cur.execute("SELECT * FROM users WHERE username = %s;", (username,))
+            user = cur.fetchone()
+        else:
+            cur = db.execute("SELECT * FROM users WHERE username = ?", (username,))
+            user = cur.fetchone()
+        
+        authenticated = False
+        if user:
+            user_pass = user["password"]
+            if user_pass.startswith("scrypt:") or user_pass.startswith("pbkdf2:"):
+                authenticated = check_password_hash(user_pass, password)
+            else:
+                authenticated = (user_pass == password)
+
+        if authenticated:
+            session.clear()
+            session["user_id"] = user["id"]
+            session["username"] = user["username"]
+            log_event("login_attempt", f"Usuário {username} autenticado com sucesso", {"result": "success", "username": username})
+            return redirect(url_for("tasks"))
+        else:
+            error = f"Credenciais inválidas para o usuário: {username}"
+            log_event("login_attempt", f"Falha de autenticação para o usuário: {username}", {"result": "failure", "username": username})
+
+    return render_template("login.html", error=error)
+
+@app.route("/logout")
+def logout():
+    username = session.get("username", "anonymous")
+    log_event("user_logout", f"Usuário {username} realizou logout")
+    session.clear()
+    return redirect(url_for("login"))
+
+@app.route("/tasks")
+def tasks():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    
+    db = get_db()
+    og = request.args.get("og", "")
+    search = request.args.get("search", "") or request.args.get("q", "")
+    
+    if DATABASE_URL:
+        cur = db.cursor()
+        if search:
+            cur.execute("SELECT * FROM tasks WHERE user_id = %s AND (title ILIKE %s OR description ILIKE %s);",
+                        (session["user_id"], f"%{search}%", f"%{search}%"))
+        else:
+            cur.execute("SELECT * FROM tasks WHERE user_id = %s;", (session["user_id"],))
+        tasks_list = cur.fetchall()
+    else:
+        if search:
+            cur = db.execute("SELECT * FROM tasks WHERE user_id = ? AND (title LIKE ? OR description LIKE ?)",
+                             (session["user_id"], f"%{search}%", f"%{search}%"))
+        else:
+            cur = db.execute("SELECT * FROM tasks WHERE user_id = ?", (session["user_id"],))
+        tasks_list = cur.fetchall()
+        
+    log_event("task_listed", f"Listagem de tarefas realizada por {session['username']}")
+    return render_template("tasks.html", tasks=tasks_list, username=session["username"], og=og, search=search)
+
+@app.route("/tasks/new", methods=["GET", "POST"])
+def new_task():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    
+    if request.method == "POST":
+        title = request.form.get("title", "")
+        description = request.form.get("description", "")
+        
+        db = get_db()
+        if DATABASE_URL:
+            cur = db.cursor()
+            cur.execute("INSERT INTO tasks (user_id, title, description, done) VALUES (%s, %s, %s, 0);",
+                        (session["user_id"], title, description))
+            db.commit()
+        else:
+            db.execute("INSERT INTO tasks (user_id, title, description, done) VALUES (?, ?, ?, 0)",
+                       (session["user_id"], title, description))
+            db.commit()
+            
+        log_event("task_created", f"Nova tarefa criada: {title}", {"title": title})
+        return redirect(url_for("tasks"))
+        
+    return render_template("new_task.html")
+
+if __name__ == "__main__":
+    debug_mode = os.environ.get("FLASK_DEBUG", "0").lower() in ("1", "true", "t")
+    app.run(host="0.0.0.0", port=5000, debug=debug_mode)v

@@ -31,8 +31,6 @@
 #   4. Adicione o Loki como data source (URL: http://loki:3100) - ou use
 #      o provisionamento automatico ja incluido abaixo.
 
-version: "3.8"
-
 services:
   loki:
     image: grafana/loki:2.9.6

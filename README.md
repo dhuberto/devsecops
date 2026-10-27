@@ -178,3 +178,18 @@ para identificar o IP ofensor.
 
 Documentar Evidências
 Capture as telas do Grafana mostrando as falhas de login mapeadas e insira essas evidências, junto com as queries utilizadas, nos arquivos docs/observabilidade.md e docs/runbook-login-bruteforce.md já criados.
+
+## Limpando o ambiente
+### Parando a aplicação
+```bash
+docker stop taskflow-app
+```
+
+### parando o Grafana, loki e o promtail
+```bash
+docker compose down
+```
+
+### Apagando diretório
+cd ~
+rm -rf devsecops

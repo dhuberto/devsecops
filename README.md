@@ -65,7 +65,7 @@ em `TASKFLOW_ADMIN_PASSWORD`.
 git clone https://github.com/dhuberto/devsecops.git
 cd devsecops
 # 3. Gerar a SECRET_KEY (copie o valor impresso)
-python -c "import secrets; print(secrets.token_hex(32))"
+python3 -c "import secrets; print(secrets.token_hex(32))"
 
 # 4. Criar o .env a partir do modelo
 cp .env.example .env               # Windows: copy .env.example .env
@@ -80,11 +80,11 @@ POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postg
 ```
 docker run -d --rm -p 5000:5000 --env-file .env -v $(pwd)/logs:/app/logs --name taskflow-app taskflow:vuln
+
 ```
 
 ## Estrutura
 
-```
 devsecops/
 ├── .dockerignore                          # Define arquivos e pastas ignorados no contexto de build do Docker.
 ├── .env.example                           # Modelo de variáveis de ambiente documentado sem segredos reais.

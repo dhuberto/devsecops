@@ -55,6 +55,7 @@ services:
       TASKFLOW_SECRET_KEY: ${TASKFLOW_SECRET_KEY:-desenvolvimento-chave-temporaria-devsecops}
       TASKFLOW_ADMIN_PASSWORD: ${TASKFLOW_ADMIN_PASSWORD:-admin123}
       FLASK_DEBUG: "0"
+      TMPDIR: /tmp
     networks:
       - frontend
       - backend
@@ -62,6 +63,7 @@ services:
     tmpfs:
       - /tmp
       - /run
+      - /app/.gunicorn
     volumes:
       - ../logs:/app/logs
     deploy:

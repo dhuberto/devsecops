@@ -79,8 +79,9 @@ TASKFLOW_ADMIN_PASSWORD=uma-senha-que-voce-escolher
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postg
 ```
+```bash
 docker run -d --rm -p 5000:5000 --env-file .env -v $(pwd)/logs:/app/logs --name taskflow-app taskflow:vuln
-
+```
 ```
 
 ## Estrutura

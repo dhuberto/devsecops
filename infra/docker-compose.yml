@@ -79,4 +79,3 @@ services:
 # RESUMO: O arquivo assegura isolamento de rede, ausência de portas expostas no DB,
 # limites de CPU/Memória, filesystem read-only e verificação de saúde (healthcheck).
 # ==============================================================================
-vv

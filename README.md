@@ -108,7 +108,7 @@ docker compose -f codigo/observabilidade/docker-compose.yml up -d
 
 3.2. Escanear o Terraform e Compose com Checkov e TrivyNa raiz do repositório, rode as ferramentas de análise estática de infraestrutura:  
 ```bash
-Bash# Checkov
+# Checkov
 docker run --rm -v $(pwd):/tf bridgecrew/checkov:latest -d /tf
 
 # Trivy IaC / Config

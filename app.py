@@ -1,7 +1,7 @@
 # ==============================================================================
 # ARQUIVO: app.py
-# DESCRIÇÃO: Aplicação Flask TaskFlow com correções de XSS, rotas de debug removidas,
-#            higiene de segredos e logging estruturado em JSON com request_id.
+# DESCRIÇÃO: Aplicação Flask TaskFlow com SQLite, correções de XSS,
+#            remoção de rotas inseguras e logging estruturado em JSON com request_id.
 # ==============================================================================
 
 import os
@@ -9,7 +9,7 @@ import sqlite3
 import uuid
 import logging
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Flask, request, render_template, redirect, url_for, session, g
 
 app = Flask(__name__)
@@ -17,14 +17,13 @@ app = Flask(__name__)
 # ------------------------------------------------------------------------------
 # BLOCO 1: Configuração de Segredos e Variáveis de Ambiente
 # ------------------------------------------------------------------------------
-_secret_key = os.environ.get("TASKFLOW_SECRET_KEY")
-if not _secret_key:
-    # Em produção, a aplicação deve falhar caso a secret não seja injetada via container/env
-    _secret_key = "desenvolvimento-chave-temporaria-devsecops"
-
+_secret_key = os.environ.get("TASKFLOW_SECRET_KEY", "desenvolvimento-chave-temporaria-devsecops")
 app.config["SECRET_KEY"] = _secret_key
-# Debug desativado por padrão. Habilitado apenas se FLASK_DEBUG=1
-app.config["DEBUG"] = os.environ.get("FLASK_DEBUG", "0") == "1"
+app.config["DEBUG"] = os.environ.get("FLASK_DEBUG", "0").lower() in ("1", "true", "t")
+
+# Define o caminho do banco SQLite via variável de ambiente.
+# Fallback para "taskflow.db" quando executado diretamente pelo terminal (python app.py)
+DATABASE = os.environ.get("TASKFLOW_DB", "taskflow.db")
 
 # ------------------------------------------------------------------------------
 # BLOCO 2: Configuração do Logging Estruturado em JSON (Módulo 6)
@@ -33,33 +32,38 @@ class JSONFormatter(logging.Formatter):
     """Formatador de logs em formato JSON estruturado com sanitização de dados sensíveis."""
     def format(self, record):
         log_data = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "level": record.levelname,
+            "logger": record.name,
             "message": record.getMessage(),
-            "request_id": getattr(record, "request_id", "N/A"),
-            "ip": getattr(record, "client_ip", "N/A"),
-            "user": getattr(record, "username", "anonymous")
+            "request_id": getattr(g, "request_id", "N/A"),
+            "ip": getattr(g, "client_ip", "127.0.0.1"),
+            "user": session.get("username", "anonymous") if session else "anonymous"
         }
-        # Adiciona campos extras do record se existirem
+        # Adiciona campos extras na raiz do JSON para suporte às queries LogQL do Grafana
         if hasattr(record, "extra_data"):
             log_data.update(record.extra_data)
         return json.dumps(log_data)
 
-# Configura handler de log salvando em arquivo para coleta do Promtail
+# Configura handler de arquivo (para o Promtail) e de terminal
 os.makedirs("logs", exist_ok=True)
-log_handler = logging.FileHandler("logs/taskflow.log")
-log_handler.setFormatter(JSONFormatter())
+file_handler = logging.FileHandler("logs/taskflow.log")
+file_handler.setFormatter(JSONFormatter())
+
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(JSONFormatter())
 
 logger = logging.getLogger("taskflow")
 logger.setLevel(logging.INFO)
-logger.addHandler(log_handler)
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
 
 # ------------------------------------------------------------------------------
-# BLOCO 3: Middlewares e Gestão de Request ID e Banco de Dados
+# BLOCO 3: Middlewares, Request ID e Gestão do Banco de Dados SQLite
 # ------------------------------------------------------------------------------
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect("taskflow.db")
+        g.db = sqlite3.connect(DATABASE)
         g.db.row_factory = sqlite3.Row
     return g.db
 
@@ -79,34 +83,47 @@ def log_event(event_type, message, extra=None):
     """Auxiliar para emitir logs sanitizados sem expor senhas ou tokens."""
     extra_info = {"event": event_type}
     if extra:
-        # Garantia de higiene: remove senhas/tokens se presentes por engano
+        # Garante a remoção de senhas/tokens se passados acidentalmente
         sanitized_extra = {k: v for k, v in extra.items() if k.lower() not in ["password", "token", "secret", "cookie"]}
         extra_info.update(sanitized_extra)
     
-    extra_dict = {
-        "request_id": getattr(g, "request_id", "N/A"),
-        "client_ip": getattr(g, "client_ip", "N/A"),
-        "username": session.get("username", "anonymous"),
-        "extra_data": extra_info
-    }
-    logger.info(message, extra=extra_dict)
+    logger.info(message, extra={"extra_data": extra_info})
 
-# Init DB
 def init_db():
-    db = sqlite3.connect("taskflow.db")
-    db.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, password TEXT)")
-    db.execute("CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY, user_id INTEGER, title TEXT, description TEXT, done INTEGER)")
-    # Usuário padrão para testes didáticos
+    """Inicializa as tabelas no SQLite utilizando o caminho dinâmico em DATABASE."""
+    db = sqlite3.connect(DATABASE)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL
+        );
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            done INTEGER DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        );
+    """)
+    
+    # Cria usuário admin padrão para testes
+    admin_pass = os.environ.get("TASKFLOW_ADMIN_PASSWORD", "admin123")
     cur = db.execute("SELECT * FROM users WHERE username = ?", ("admin",))
     if not cur.fetchone():
-        db.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("admin", "admin123"))
+        db.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("admin", admin_pass))
     db.commit()
     db.close()
 
-init_db()
+# Executa inicialização do banco no contexto da aplicação Flask
+with app.app_context():
+    init_db()
 
 # ------------------------------------------------------------------------------
-# BLOCO 4: Rotas da Aplicação (Com templates Jinja2 sem | safe)
+# BLOCO 4: Rotas da Aplicação (Com renderização segura Jinja2)
 # ------------------------------------------------------------------------------
 @app.route("/")
 def index():
@@ -122,19 +139,17 @@ def login():
         password = request.form.get("password", "")
         
         db = get_db()
-        # Query parametrizada contra SQL Injection
         cur = db.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, password))
         user = cur.fetchone()
         
         if user:
             session["user_id"] = user["id"]
             session["username"] = user["username"]
-            log_event("login_success", f"Usuário {username} autenticado com sucesso")
+            log_event("login_attempt", f"Usuário {username} autenticado com sucesso", {"result": "success", "username": username})
             return redirect(url_for("tasks"))
         else:
-            # Mensagem de erro renderizada de forma segura via Jinja2 no template
             error = f"Credenciais inválidas para o usuário: {username}"
-            log_event("login_failure", f"Falha de autenticação para o usuário: {username}")
+            log_event("login_attempt", f"Falha de autenticação para o usuário: {username}", {"result": "failure", "username": username})
 
     return render_template("login.html", error=error)
 
@@ -151,8 +166,8 @@ def tasks():
         return redirect(url_for("login"))
     
     db = get_db()
-    og = request.args.get("og", "")  # Parâmetro da busca da aula 9
-    search = request.args.get("search", "")
+    og = request.args.get("og", "")
+    search = request.args.get("search", "") or request.args.get("q", "")
     
     if search:
         query = "SELECT * FROM tasks WHERE user_id = ? AND (title LIKE ? OR description LIKE ?)"
@@ -161,9 +176,8 @@ def tasks():
         cur = db.execute("SELECT * FROM tasks WHERE user_id = ?", (session["user_id"],))
         
     tasks_list = cur.fetchall()
-    log_event("task_list", f"Listagem de tarefas realizada por {session['username']}")
+    log_event("task_listed", f"Listagem de tarefas realizada por {session['username']}")
     
-    # render_template faz autoescape por padrão de og e task.description
     return render_template("tasks.html", tasks=tasks_list, username=session["username"], og=og, search=search)
 
 @app.route("/tasks/new", methods=["GET", "POST"])
@@ -179,7 +193,7 @@ def new_task():
         db.execute("INSERT INTO tasks (user_id, title, description, done) VALUES (?, ?, ?, 0)",
                    (session["user_id"], title, description))
         db.commit()
-        log_event("task_created", f"Nova tarefa criada: {title}")
+        log_event("task_created", f"Nova tarefa criada: {title}", {"title": title})
         return redirect(url_for("tasks"))
         
     return render_template("new_task.html")
@@ -187,11 +201,5 @@ def new_task():
 # NOTA DIDÁTICA: A rota /debug/info foi inteiramente removida por razões de segurança.
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
-
-# ==============================================================================
-# RESUMO DAS ALTERAÇÕES NO app.py:
-# 1. Removida a rota insegura /debug/info.
-# 2. Adicionado autoescape nativo via render_template nos sinks og, error e tasks.
-# 3. Adicionada estruturação de logs JSON com request_id e filtro contra senhas.
-# ==============================================================================
+    debug_mode = os.environ.get("FLASK_DEBUG", "0").lower() in ("1", "true", "t")
+    app.run(host="0.0.0.0", port=5000, debug=debug_mode)

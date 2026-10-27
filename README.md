@@ -106,6 +106,14 @@ cd devsecops
 sudo docker compose up -d --build
 ```
 
+3.2. Escanear o Terraform e Compose com Checkov e TrivyNa raiz do repositório, rode as ferramentas de análise estática de infraestrutura:  
+```bash
+Bash# Checkov
+docker run --rm -v $(pwd):/tf bridgecrew/checkov:latest -d /tf
+
+# Trivy IaC / Config
+docker run --rm -v $(pwd):/src aquasec/trivy config /src
+```
 Acessar a aplicação no navegador em http://<IP_DA_SUA_VM>:5000 e realize múltiplas tentativas de login com senhas incorretas seguidas para gerar os logs de falha simulando a força bruta.
 
 Consultar Logs no Grafana

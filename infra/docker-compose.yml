@@ -48,9 +48,12 @@ services:
     ports:
       - "5000:5000"
     environment:
+      POSTGRES_USER: ${POSTGRES_USER:-taskflow_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taskflow_pass_secure}
+      POSTGRES_DB: ${POSTGRES_DB:-taskflow_db}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-taskflow_user}:${POSTGRES_PASSWORD:-taskflow_pass_secure}@db:5432/${POSTGRES_DB:-taskflow_db}
       TASKFLOW_SECRET_KEY: ${TASKFLOW_SECRET_KEY:-desenvolvimento-chave-temporaria-devsecops}
       TASKFLOW_ADMIN_PASSWORD: ${TASKFLOW_ADMIN_PASSWORD:-admin123}
-      TASKFLOW_DB: /tmp/taskflow.db
       FLASK_DEBUG: "0"
     networks:
       - frontend

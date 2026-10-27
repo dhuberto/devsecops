@@ -121,9 +121,6 @@ docker run --rm -v $(pwd):/tf bridgecrew/checkov:latest -d /tf
 docker run --rm -v $(pwd):/src aquasec/trivy config /src
 ```
 
-```bash
-docker compose up -d
-```
 
 ## Como executar com Docker
 
@@ -163,10 +160,11 @@ em `TASKFLOW_ADMIN_PASSWORD`.
 | admin   | admin123 |
 | aluno   | senha123 |
 
-Cada módulo cria, dentro da sua própria pasta `codigo/`, uma cópia ou um
-patch desta aplicação demonstrando o "antes" (vulnerável) e o "depois"
-(corrigido) referente ao tema daquele encontro.
+### Iniciar o Grafana, loki e o promtail
 
+```bash
+docker compose up -d
+```
 
 Acessar a aplicação no navegador em http://<IP_DA_SUA_VM>:5000 e realize múltiplas tentativas de login com senhas incorretas seguidas para gerar os logs de falha simulando a força bruta.
 

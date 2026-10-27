@@ -57,11 +57,11 @@ devsecops/
 Execução das Pipelines de Segurança (GitHub Actions)
 
 Os workflows integrados no repositório executam as seguintes verificações automaticamente a cada push ou pull_request:
-
+```
     DAST (.github/workflows/dast.yml): Constrói a imagem da aplicação, executa a varredura dinâmica OWASP ZAP contra a porta 5000 e publica o relatório em HTML nos Artefatos do Job.
 
     IaC Scan (.github/workflows/iac-scan.yml): Valida os arquivos Terraform e configurações Docker Compose utilizando Checkov e Trivy, bloqueando a esteira caso existam falhas graves de infraestrutura.
-    
+```    
 ## Como executar localmente
 
 ```bash

@@ -163,6 +163,11 @@ em `TASKFLOW_ADMIN_PASSWORD`.
 ```bash
 docker compose up -d
 ```
+### Executar o Scanner ZAP DAST
+
+```bash
+docker run --rm -t --add-host=host.docker.internal:host-gateway   zaproxy/zap-stable zap-baseline.py -t http://host.docker.internal:5000
+```
 
 Acessar a aplicação no navegador em http://<IP_DA_SUA_VM>:5000 e realize múltiplas tentativas de login com senhas incorretas seguidas para gerar os logs de falha simulando a força bruta.
 

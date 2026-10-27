@@ -121,11 +121,17 @@ python app.py
 ```bash
 cd ~/devsecops
 
-# Checkov
+# Checkov (IaC)
 docker run --rm -v $(pwd):/tf bridgecrew/checkov:latest -d /tf
+
+# Checkov gerando trivy-iac-report.json
+docker run --rm -v $(pwd):/src aquasec/trivy:latest config --format json -o /src/trivy-iac-report.json /src
 
 # Trivy IaC / Config
 docker run --rm -v $(pwd):/src aquasec/trivy config /src
+
+# Trivy gerando /src/trivy-iac-report.json
+docker run --rm -v $(pwd):/src aquasec/trivy:latest config --format json -o /src/trivy-iac-report.json /src
 ```
 
 
@@ -202,12 +208,6 @@ docker run --rm -v $(pwd):/zap/wrk/:rw -t zaproxy/zap-stable zap-baseline.py \
   -t http://host.docker.internal:5000 \
   -g gen.conf -r report_dast.html -m report_dast.md
 ```
-### Executar o Checkov (IaC)
-```bash
-checkov -d .
-```
-
-
 
 ## Limpando o ambiente
 ### Parando a aplicação

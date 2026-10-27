@@ -12,16 +12,16 @@ A TaskFlow emite logs estruturados em formato JSON no arquivo `logs/taskflow.log
 
 ## 2. Consultas LogQL Utilizadas no Grafana
 
-### Consulta 1: Contagem de Falhas de Login por IP (Detecção de Força Bruta)
-```logql
-sum by (ip) (count_over_time({job="taskflow"} | json | event = "login_failure" [5m]))
 <img width="1618" height="814" alt="{E38E64D3-C32F-4E2D-B0FE-825EAD7054F3}" src="https://github.com/user-attachments/assets/ba34868e-d9c8-4c1f-931e-b974ffa1278c" />
 
 ### Query
 ```bash
 {job="taskflow"} | json | event = "login_attempt" | result = "failure" | username = "admin"
 ```
-
+### Consulta 1: Contagem de Falhas de Login por IP (Detecção de Força Bruta)
+```logql
+sum by (ip) (count_over_time({job="taskflow"} | json | event = "login_failure" [5m]))
+```
 # Arquitetura e Coleta de Logs - Stack Grafana/Loki/Promtail
 
 ## 1. Fluxo de Coleta de Logs

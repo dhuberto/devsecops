@@ -187,6 +187,10 @@ docker run --rm -t --add-host=host.docker.internal:host-gateway   zaproxy/zap-st
 
 Acessar a aplicação no navegador em http://<IP_DA_SUA_VM>:5000 e realize múltiplas tentativas de login com senhas incorretas seguidas para gerar os logs de falha simulando a força bruta.
 
+### Gerando varias tentativa de acesso
+```bash
+for i in {1..20}; do   curl -s -X POST http://localhost:5000/login     -d "username=admin&password=wrongpassword$i" > /dev/null;   echo "Tentativa $i enviada.";   sleep 0.2; done
+```
 Consultar Logs no Grafana
 Acesse o painel em http://<IP_DA_SUA_VM>:3000. Navegue até a aba "Explore", selecione a fonte de dados "Loki" e execute suas consultas LogQL 
 ex: 

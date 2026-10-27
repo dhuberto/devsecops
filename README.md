@@ -51,7 +51,7 @@ POSTGRES_PASSWORD=postg
 python app.py
 ```
 
-Acesse http://127.0.0.1:5001 e entre com o usuário `admin` e a senha definida
+Acesse http://127.0.0.1:5000 ou o IP da VM e entre com o usuário `admin` e a senha definida
 em `TASKFLOW_ADMIN_PASSWORD`.
 
 | Usuário | Senha    |

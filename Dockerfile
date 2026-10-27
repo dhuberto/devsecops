@@ -20,10 +20,11 @@ COPY --from=build /usr/local/bin /usr/local/bin
 
 WORKDIR /app
 
-# Cria um usuário e grupo dedicados, sem privilégios administrativos
+# Cria um usuário e grupo dedicados, além da pasta de logs com as permissões do usuário não-root
 RUN groupadd --system taskflow && \
     useradd --system --gid taskflow --home-dir /app --shell /usr/sbin/nologin taskflow && \
-    chown taskflow:taskflow /app
+    mkdir -p /app/logs && \
+    chown -R taskflow:taskflow /app
 
 # Copia o código da aplicação garantindo que o usuário não-root seja o dono
 COPY --chown=taskflow:taskflow . .

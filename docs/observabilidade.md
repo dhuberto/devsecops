@@ -12,7 +12,7 @@ A TaskFlow emite logs estruturados em formato JSON no arquivo `logs/taskflow.log
 
 ## 2. Consultas LogQL Utilizadas no Grafana
 
-<img width="1618" height="814" alt="{E38E64D3-C32F-4E2D-B0FE-825EAD7054F3}" src="https://github.com/user-attachments/assets/ba34868e-d9c8-4c1f-931e-b974ffa1278c" />
+<img width="1600" height="575" alt="log-grafana" src="https://github.com/user-attachments/assets/90d01e66-f106-44ba-abc5-86d7f9307591" />
 
 ### Query
 ```bash
@@ -29,6 +29,8 @@ sum by (ip) (count_over_time({job="taskflow"} | json | event = "login_failure" [
 2. **Promtail (Agente):** Monitora o volume montado em `/var/log/taskflow/*.log`, extrai os rótulos (`level`, `event`, `result`) do JSON e envia os dados via API HTTP para o servidor Loki.
 3. **Loki (Datastore):** Armazena e indexa os logs com base nos rótulos recebidos.
 4. **Grafana (Visualização):** Conecta-se ao Loki como Datasource e executa queries LogQL para dashboards e alertas.
+
+<img width="1109" height="576" alt="image" src="https://github.com/user-attachments/assets/bf0b2602-24cf-4415-a782-6796e71cf630" />
 
 ---
 

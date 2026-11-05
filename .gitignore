@@ -1,12 +1,10 @@
 # Arquivos e diretórios ignorados pelo controle de versão do Git.
 # Impede a persistência de segredos, ambientes virtuais e artefatos locais no repositório.
 
+.venv/
+__pycache__/
+taskflow.db
 .env
-*.db
-logs/
-*.tfstate
-*.tfstate.backup
-.terraform/
 
 
 # =============================================================================
@@ -20,3 +18,12 @@ logs/
 # Isolamento de Artefatos Locais e Estado da Aplicação
 # - O que mudou: Exclusão do ambiente virtual Python (.venv/), caches de compilação (__pycache__/) e arquivo local de banco de dados SQLite (taskflow.db).
 # - Por quê: Mantém o repositório Git limpo, focado exclusivamente no código-fonte e configurações versionáveis, evitando conflitos de mesclagem e divergências entre ambientes de desenvolvimento.
+zap-antes/
+zap-depois/
+logs/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan

@@ -1,38 +1,34 @@
-<!--
-==============================================================================
-ARQUIVO: templates/login.html
-DESCRIÇÃO: Form de login renderizando mensagens de erro com autoescape Jinja2
-==============================================================================
--->
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <title>TaskFlow - Login</title>
+    {# CSS em arquivo externo: a CSP (default-src 'self') bloqueia estilos inline. #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h2>Login no TaskFlow</h2>
-    
-    <!-- BLOCO DE ERRO: Renderizado via Jinja2 sem utilizar o filtro | safe -->
+    {#
+      O Jinja2 aplica autoescape automatico para todas as variaveis renderizadas via {{ ... }}.
+      Isso impede vulnerabilidades de XSS Refletido e Injecao de HTML na exibicao do erro.
+    #}
+    <h2>TaskFlow - Autenticação</h2>
+
     {% if error %}
-        <div style="color: red;" id="error-message">
-            <p>{{ error }}</p>
-        </div>
+        <p class="error">{{ error }}</p>
     {% endif %}
 
-    <form method="POST" action="/login">
-        <label>Usuário:</label><br>
-        <input type="text" name="username" required><br><br>
-        
-        <label>Senha:</label><br>
-        <input type="password" name="password" required><br><br>
-        
+    <form method="POST" action="{{ url_for('login') }}">
+        <div>
+            <label for="username">Usuário:</label>
+            <input type="text" id="username" name="username" required autocomplete="off">
+        </div>
+        <br>
+        <div>
+            <label for="password">Senha:</label>
+            <input type="password" id="password" name="password" required>
+        </div>
+        <br>
         <button type="submit">Entrar</button>
     </form>
 </body>
 </html>
-<!--
-==============================================================================
-RESUMO: O uso de {{ error }} sem o filtro | safe previne XSS refletido.
-==============================================================================
--->

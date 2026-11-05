@@ -1,165 +1,252 @@
-# ==============================================================================
-# ARQUIVO: app.py
-# DESCRIÇÃO: Aplicação Flask TaskFlow com suporte híbrido (PostgreSQL + SQLite),
-#            correções de XSS, remoção de rotas inseguras, higiene de segredos
-#            e logging estruturado em JSON com request_id.
-# ==============================================================================
+"""
+TaskFlow - Aplicacao de exemplo da disciplina DevSecOps (versao CORRIGIDA).
+
+Vulnerabilidades da linha de base e como foram corrigidas:
+  1. SQL Injection (login e busca)  -> consultas parametrizadas ("?").
+  2. XSS armazenado                 -> HTML em templates Jinja2 (autoescape).
+  3. SECRET_KEY hardcoded           -> lida de TASKFLOW_SECRET_KEY (ambiente/.env).
+  4. Senhas em texto puro           -> hash com salt (werkzeug.security); senha
+                                       inicial do admin vem de TASKFLOW_ADMIN_PASSWORD.
+  5. Endpoint /debug/info exposto   -> removido (vazava a SECRET_KEY).
+  6. debug=True e host 0.0.0.0      -> debug via FLASK_DEBUG (desligado por padrao);
+                                       em producao roda via gunicorn.
+  7. Cabecalhos de seguranca        -> CSP, X-Frame-Options, nosniff etc. (Modulo 4).
+  8. Observabilidade (Modulo 6)     -> logs estruturados em JSON com request_id e
+                                       eventos de seguranca, SEM dados sensiveis.
+"""
 
 import json
 import logging
 import os
 import sqlite3
+import time
 import uuid
 from datetime import datetime, timezone
+
+from dotenv import load_dotenv
 from flask import Flask, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
-app = Flask(__name__)
+# Carrega variaveis do arquivo .env (apenas desenvolvimento local).
+# O .env esta no .gitignore e NUNCA deve ser commitado.
+load_dotenv()
 
-# ------------------------------------------------------------------------------
-# BLOCO 1: Configuração de Segredos e Variáveis de Ambiente
-# ------------------------------------------------------------------------------
-_secret_key = os.environ.get("TASKFLOW_SECRET_KEY", "desenvolvimento-chave-temporaria-devsecops")
-app.config["SECRET_KEY"] = _secret_key
-app.config["DEBUG"] = os.environ.get("FLASK_DEBUG", "0").lower() in ("1", "true", "t")
 
-# Proteção de cookies de sessão contra exfiltração por XSS e CSRF
-app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+# =============================================================================
+# Logging estruturado em JSON (Modulo 6)
+# =============================================================================
+# Cada evento vira UMA linha JSON (JSON Lines). O Promtail le o arquivo e envia
+# ao Loki; no Grafana os campos viram filtros (| json | result="failure").
+#
+# REGRA: nunca logar senha, cookie, token, SECRET_KEY, request.form inteiro,
+# conteudo de tarefas ou termo de busca. So metadados necessarios a investigacao.
+_CAMPOS_PADRAO_DO_RECORD = set(
+    logging.LogRecord("", 0, "", 0, "", None, None).__dict__
+) | {"message", "asctime"}
 
-# Inspeciona variáveis para determinar o tipo de banco (PostgreSQL no Docker vs SQLite no Terminal)
-DATABASE_URL = os.environ.get("DATABASE_URL")
-SQLITE_PATH = os.environ.get("TASKFLOW_DB", "taskflow.db")
 
-# ------------------------------------------------------------------------------
-# BLOCO 2: Configuração do Logging Estruturado em JSON (Observabilidade)
-# ------------------------------------------------------------------------------
-class JSONFormatter(logging.Formatter):
-    """Formatador de logs em formato JSON estruturado para coleta pelo Promtail/Loki."""
-    def format(self, record):
-        log_data = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+class JsonFormatter(logging.Formatter):
+    """Formata cada LogRecord como uma linha JSON."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        entry = {
+            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
-            "event": getattr(record, "event", "general"),
-            "request_id": getattr(g, "request_id", "N/A"),
-            "ip": getattr(g, "client_ip", "127.0.0.1"),
-            "user": session.get("username", "anonymous") if session and "username" in session else "anonymous"
         }
-        if hasattr(record, "extra_data"):
-            log_data.update(record.extra_data)
-        return json.dumps(log_data)
+        # Campos de negocio passados via extra={...} (event, request_id, ip...).
+        for chave, valor in record.__dict__.items():
+            if chave not in _CAMPOS_PADRAO_DO_RECORD and chave not in entry:
+                entry[chave] = valor
+        if record.exc_info:
+            entry["exception"] = self.formatException(record.exc_info)
+        # json.dumps escapa quebras de linha: um atacante nao consegue
+        # "forjar" uma linha de log nova (log injection).
+        return json.dumps(entry, ensure_ascii=False, default=str)
 
-os.makedirs("logs", exist_ok=True)
-file_handler = logging.FileHandler("logs/taskflow.log")
-file_handler.setFormatter(JSONFormatter())
 
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(JSONFormatter())
+def configurar_logging() -> logging.Logger:
+    """Logger 'taskflow': JSON no stdout e, se possivel, no arquivo lido pelo Promtail."""
+    logger = logging.getLogger("taskflow")
+    if logger.handlers:  # evita handlers duplicados se o modulo for reimportado
+        return logger
+    logger.setLevel(os.environ.get("TASKFLOW_LOG_LEVEL", "INFO").upper())
+    logger.propagate = False
 
-logger = logging.getLogger("taskflow")
-logger.setLevel(logging.INFO)
-logger.addHandler(file_handler)
-logger.addHandler(console_handler)
+    formatter = JsonFormatter()
 
-# ------------------------------------------------------------------------------
-# BLOCO 3: Middlewares, Request ID e Gestão de Conexão de Banco de Dados Híbrida
-# ------------------------------------------------------------------------------
+    console = logging.StreamHandler()
+    console.setFormatter(formatter)
+    logger.addHandler(console)
+
+    log_file = os.environ.get("TASKFLOW_LOG_FILE", "logs/taskflow.log")
+    if log_file:
+        try:
+            os.makedirs(os.path.dirname(log_file) or ".", exist_ok=True)
+            file_handler = logging.FileHandler(log_file, encoding="utf-8")
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+        except OSError as exc:
+            # Ex.: container --read-only sem volume de logs (pipeline do DAST).
+            # A app continua funcionando e loga apenas no stdout.
+            logger.warning(
+                "arquivo de log indisponivel; usando apenas stdout",
+                extra={"event": "log_file_unavailable", "log_file": log_file, "error": str(exc)},
+            )
+    return logger
+
+
+logger = configurar_logging()
+
+app = Flask(__name__)
+
+# ANTES: SECRET_KEY com valor fixo no codigo (achado de SAST/secret scanning).
+# AGORA: lida do ambiente; sem ela a app nao sobe (fail fast).
+_secret_key = os.environ.get("TASKFLOW_SECRET_KEY")
+if not _secret_key:
+    raise RuntimeError(
+        "Variavel de ambiente TASKFLOW_SECRET_KEY nao foi definida. "
+        "Configure-a antes de iniciar a aplicacao "
+        "(ex: export TASKFLOW_SECRET_KEY='valor-aleatorio-e-longo')."
+    )
+app.config["SECRET_KEY"] = _secret_key
+
+# Cookie de sessao inacessivel via JavaScript e nao enviado em requisicoes
+# cross-site (mitiga roubo de sessao via XSS e CSRF).
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+# Caminho do banco configuravel: no container aponta para /app/data (unica
+# pasta gravavel pelo usuario nao-root). Localmente continua "taskflow.db".
+DATABASE = os.environ.get("TASKFLOW_DATABASE", "taskflow.db")
+
+# Cabecalhos de seguranca aplicados a TODAS as respostas.
+# ANTES: o ZAP Baseline apontou 10020, 10021, 10038, 10063 e 90004
+#        (cabecalhos ausentes - OWASP A02:2025 Security Misconfiguration).
+# AGORA: definidos aqui uma unica vez e aplicados via after_request.
+SECURITY_HEADERS = {
+    # CSP: so carrega recursos da propria origem; proibe ser embutido em
+    # iframe (clickjacking), plugins (object) e envio de formularios para
+    # outros dominios. Sem 'unsafe-inline': scripts/estilos inline sao
+    # bloqueados, uma segunda barreira caso um XSS escape do autoescape.
+    "Content-Security-Policy": (
+        "default-src 'self'; frame-ancestors 'none'; form-action 'self'; "
+        "base-uri 'self'; object-src 'none'"
+    ),
+    "X-Frame-Options": "DENY",  # clickjacking em navegadores antigos
+    "X-Content-Type-Options": "nosniff",  # impede MIME sniffing
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Cross-Origin-Embedder-Policy": "require-corp",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-origin",
+}
+
+
+@app.after_request
+def set_security_headers(response):
+    for header, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
+    return response
+
+
+# =============================================================================
+# request_id por requisicao (correlacao de eventos no Grafana/Loki)
+# =============================================================================
+@app.before_request
+def iniciar_requisicao():
+    g.request_id = str(uuid.uuid4())
+    g.start_time = time.perf_counter()
+
+
+@app.after_request
+def registrar_requisicao(response):
+    response.headers["X-Request-ID"] = g.get("request_id", "")
+    if not request.path.startswith("/static/"):  # CSS nao interessa a investigacao
+        duracao_ms = round((time.perf_counter() - g.get("start_time", time.perf_counter())) * 1000, 2)
+        logger.info(
+            "requisicao finalizada",
+            extra={
+                "event": "http_request",
+                "request_id": g.get("request_id"),
+                "method": request.method,
+                "path": request.path,  # sem query string: nao vaza o termo de busca
+                "status_code": response.status_code,
+                "duration_ms": duracao_ms,
+                "ip": request.remote_addr,
+                "user": session.get("username"),
+            },
+        )
+    return response
+
+
 def get_db():
-    if "db" not in g:
-        if DATABASE_URL:
-            import psycopg2
-            import psycopg2.extras
-            g.db = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.DictCursor)
-        else:
-            g.db = sqlite3.connect(SQLITE_PATH)
-            g.db.row_factory = sqlite3.Row
-    return g.db
+    db = getattr(g, "_database", None)
+    if db is None:
+        db = g._database = sqlite3.connect(DATABASE)
+        db.row_factory = sqlite3.Row
+    return db
+
 
 @app.teardown_appcontext
-def close_db(error):
-    db = g.pop("db", None)
+def close_connection(exception):
+    db = getattr(g, "_database", None)
     if db is not None:
         db.close()
 
-@app.before_request
-def before_request():
-    g.request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
-    g.client_ip = request.remote_addr or request.headers.get("X-Forwarded-For", "127.0.0.1")
-
-def log_event(event_type, message, extra=None):
-    extra_info = {"event": event_type}
-    if extra:
-        sanitized_extra = {k: v for k, v in extra.items() if k.lower() not in ["password", "token", "secret", "cookie"]}
-        extra_info.update(sanitized_extra)
-    logger.info(message, extra={"extra_data": extra_info})
 
 def init_db():
-    admin_pass = os.environ.get("TASKFLOW_ADMIN_PASSWORD", "admin123")
-    hashed_pass = generate_password_hash(admin_pass)
+    db = get_db()
+    db.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL
+        );
 
-    if DATABASE_URL:
-        import psycopg2
-        conn = psycopg2.connect(DATABASE_URL)
-        cur = conn.cursor()
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                username VARCHAR(100) UNIQUE NOT NULL,
-                password VARCHAR(255) NOT NULL
-            );
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS tasks (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id),
-                title VARCHAR(200) NOT NULL,
-                description TEXT,
-                done INTEGER DEFAULT 0
-            );
-        """)
-        cur.execute("SELECT * FROM users WHERE username = %s;", ("admin",))
-        if not cur.fetchone():
-            cur.execute("INSERT INTO users (username, password) VALUES (%s, %s);", ("admin", hashed_pass))
-        conn.commit()
-        conn.close()
-    else:
-        db = sqlite3.connect(SQLITE_PATH)
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL
-            );
-        """)
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS tasks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                title TEXT NOT NULL,
-                description TEXT,
-                done INTEGER DEFAULT 0,
-                FOREIGN KEY (user_id) REFERENCES users (id)
-            );
-        """)
-        cur = db.execute("SELECT * FROM users WHERE username = ?", ("admin",))
-        if not cur.fetchone():
-            db.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("admin", hashed_pass))
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            done INTEGER DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        );
+        """
+    )
+    db.commit()
+
+    # ANTES: usuarios criados com senha em texto puro ("admin123") no codigo
+    #        e gravada sem hash no banco.
+    # AGORA: a senha inicial vem do ambiente e e gravada como HASH (com salt).
+    #        INSERT OR IGNORE: o gunicorn sobe varios workers e cada um roda
+    #        init_db() ao importar o app. Com o banco vazio, dois workers
+    #        tentavam criar o admin ao mesmo tempo (UNIQUE constraint failed)
+    #        e o container nao subia. Agora a criacao e idempotente.
+    admin_password = os.environ.get("TASKFLOW_ADMIN_PASSWORD")
+    if admin_password:
+        db.execute(
+            "INSERT OR IGNORE INTO users (username, password) VALUES (?, ?)",
+            ("admin", generate_password_hash(admin_password)),
+        )
         db.commit()
-        db.close()
 
+
+# init_db() roda na importacao do modulo, para funcionar tambem com o
+# gunicorn (que importa o app e nunca executa o bloco __main__).
 with app.app_context():
     init_db()
+logger.info("aplicacao TaskFlow iniciada", extra={"event": "app_startup"})
 
-# ------------------------------------------------------------------------------
-# BLOCO 4: Rotas da Aplicação
-# ------------------------------------------------------------------------------
+
 @app.route("/")
 def index():
-    if "user_id" in session:
-        return redirect(url_for("tasks"))
-    return redirect(url_for("login"))
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    return redirect(url_for("tasks"))
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -167,96 +254,156 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "")
         password = request.form.get("password", "")
-        
-        db = get_db()
-        if DATABASE_URL:
-            cur = db.cursor()
-            cur.execute("SELECT * FROM users WHERE username = %s;", (username,))
-            user = cur.fetchone()
-        else:
-            cur = db.execute("SELECT * FROM users WHERE username = ?", (username,))
-            user = cur.fetchone()
-        
-        authenticated = False
-        if user:
-            user_pass = user["password"]
-            if user_pass.startswith("scrypt:") or user_pass.startswith("pbkdf2:"):
-                authenticated = check_password_hash(user_pass, password)
-            else:
-                authenticated = (user_pass == password)
 
-        if authenticated:
+        # ANTES: "... WHERE username = '" + username + "' AND password = '" ...
+        #        -> SQL Injection (ex.: usuario  admin' --  entrava sem senha).
+        # AGORA: query parametrizada; a senha e conferida pelo hash, fora do SQL.
+        db = get_db()
+        cur = db.execute("SELECT * FROM users WHERE username = ?", (username,))
+        user = cur.fetchone()
+
+        if user and check_password_hash(user["password"], password):
+            # Limpa a sessao anterior antes de autenticar (evita fixacao de sessao).
             session.clear()
             session["user_id"] = user["id"]
             session["username"] = user["username"]
-            log_event("login_attempt", f"Usuário {username} autenticado com sucesso", {"result": "success", "username": username})
+            # Log de sucesso: username + IP. NUNCA a senha.
+            logger.info(
+                "login bem-sucedido",
+                extra={
+                    "event": "login_attempt",
+                    "result": "success",
+                    "username": username,
+                    "ip": request.remote_addr,
+                    "request_id": g.get("request_id"),
+                },
+            )
             return redirect(url_for("tasks"))
-        else:
-            error = f"Credenciais inválidas para o usuário: {username}"
-            log_event("login_attempt", f"Falha de autenticação para o usuário: {username}", {"result": "failure", "username": username})
 
+        error = "Usuario ou senha invalidos."
+        # Log de falha: base da deteccao de forca bruta (falhas por IP).
+        # NUNCA a senha, nem mascarada. Nao logamos request.form inteiro.
+        logger.warning(
+            "login falhou",
+            extra={
+                "event": "login_attempt",
+                "result": "failure",
+                "username": username,
+                "ip": request.remote_addr,
+                "request_id": g.get("request_id"),
+            },
+        )
+
+    # ANTES: HTML retornado com f-string (Semgrep: directly-returned-format-string).
+    # AGORA: template Jinja2 com autoescape.
     return render_template("login.html", error=error)
+
 
 @app.route("/logout")
 def logout():
-    username = session.get("username", "anonymous")
-    log_event("user_logout", f"Usuário {username} realizou logout")
+    logger.info(
+        "logout realizado",
+        extra={
+            "event": "logout",
+            "username": session.get("username"),
+            "ip": request.remote_addr,
+            "request_id": g.get("request_id"),
+        },
+    )
     session.clear()
     return redirect(url_for("login"))
 
-@app.route("/tasks")
+
+@app.route("/tasks", methods=["GET"])
 def tasks():
     if "user_id" not in session:
         return redirect(url_for("login"))
-    
+
+    search = request.args.get("q", "")
     db = get_db()
-    og = request.args.get("og", "")
-    search = request.args.get("search", "") or request.args.get("q", "")
-    
-    if DATABASE_URL:
-        cur = db.cursor()
-        if search:
-            cur.execute("SELECT * FROM tasks WHERE user_id = %s AND (title ILIKE %s OR description ILIKE %s);",
-                        (session["user_id"], f"%{search}%", f"%{search}%"))
-        else:
-            cur.execute("SELECT * FROM tasks WHERE user_id = %s;", (session["user_id"],))
-        tasks_list = cur.fetchall()
+
+    if search:
+        # ANTES: "... AND title LIKE '%" + search + "%'" -> SQL Injection.
+        # AGORA: o padrao do LIKE e montado fora do SQL e passado como parametro.
+        like_pattern = f"%{search}%"
+        rows = db.execute(
+            "SELECT * FROM tasks WHERE user_id = ? AND title LIKE ?",
+            (session["user_id"], like_pattern),
+        ).fetchall()
     else:
-        if search:
-            cur = db.execute("SELECT * FROM tasks WHERE user_id = ? AND (title LIKE ? OR description LIKE ?)",
-                             (session["user_id"], f"%{search}%", f"%{search}%"))
-        else:
-            cur = db.execute("SELECT * FROM tasks WHERE user_id = ?", (session["user_id"],))
-        tasks_list = cur.fetchall()
-        
-    log_event("task_listed", f"Listagem de tarefas realizada por {session['username']}")
-    return render_template("tasks.html", tasks=tasks_list, username=session["username"], og=og, search=search)
+        rows = db.execute(
+            "SELECT * FROM tasks WHERE user_id = ?", (session["user_id"],)
+        ).fetchall()
+
+    # Listagem: registra QUEM acessou e o tamanho da busca, nao o termo
+    # (pode conter dado pessoal ou payload de ataque).
+    logger.info(
+        "lista de tarefas acessada",
+        extra={
+            "event": "tasks_list_accessed",
+            "username": session.get("username"),
+            "has_search": bool(search),
+            "search_length": len(search),
+            "results_count": len(rows),
+            "ip": request.remote_addr,
+            "request_id": g.get("request_id"),
+        },
+    )
+
+    # ANTES: HTML montado com f-string -> XSS armazenado na descricao.
+    # AGORA: template Jinja2 com autoescape ("<script>" vira "&lt;script&gt;").
+    return render_template(
+        "tasks.html",
+        rows=rows,
+        search=search,
+        username=session["username"],
+    )
+
 
 @app.route("/tasks/new", methods=["GET", "POST"])
 def new_task():
     if "user_id" not in session:
         return redirect(url_for("login"))
-    
+
     if request.method == "POST":
-        title = request.form.get("title", "")
+        title = request.form.get("title", "").strip()
         description = request.form.get("description", "")
-        
-        db = get_db()
-        if DATABASE_URL:
-            cur = db.cursor()
-            cur.execute("INSERT INTO tasks (user_id, title, description, done) VALUES (%s, %s, %s, 0);",
-                        (session["user_id"], title, description))
+        if title:
+            db = get_db()
+            cur = db.execute(
+                "INSERT INTO tasks (user_id, title, description) VALUES (?, ?, ?)",
+                (session["user_id"], title, description),
+            )
             db.commit()
-        else:
-            db.execute("INSERT INTO tasks (user_id, title, description, done) VALUES (?, ?, ?, 0)",
-                       (session["user_id"], title, description))
-            db.commit()
-            
-        log_event("task_created", f"Nova tarefa criada: {title}", {"title": title})
+            # Criacao de tarefa: metadados apenas (id e tamanhos), nunca o conteudo.
+            logger.info(
+                "tarefa criada",
+                extra={
+                    "event": "task_created",
+                    "username": session.get("username"),
+                    "task_id": cur.lastrowid,
+                    "title_length": len(title),
+                    "description_length": len(description),
+                    "ip": request.remote_addr,
+                    "request_id": g.get("request_id"),
+                },
+            )
         return redirect(url_for("tasks"))
-        
+
     return render_template("new_task.html")
 
+
+# ANTES: rota /debug/info publica, retornando versao do Python, plataforma
+#        e a propria SECRET_KEY.
+# AGORA: rota removida.
+
+
 if __name__ == "__main__":
-    debug_mode = os.environ.get("FLASK_DEBUG", "0").lower() in ("1", "true", "t")
-    app.run(host="0.0.0.0", port=5000, debug=debug_mode)v
+    # ANTES: app.run(host="0.0.0.0", port=5000, debug=True)
+    #        -> debugger do Werkzeug (execucao remota de codigo) exposto na rede.
+    # AGORA: servidor de desenvolvimento so na maquina local; debug controlado
+    #        pela variavel FLASK_DEBUG e DESLIGADO por padrao.
+    #        Porta 5001 para evitar conflito com o AirPlay do macOS (porta 5000).
+    #        Em producao/container a app roda com gunicorn (ver Dockerfile).
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() in ("1", "true", "yes")
+    app.run(host="127.0.0.1", port=5001, debug=debug_mode)v

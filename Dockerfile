@@ -1,46 +1,53 @@
-# ==============================================================================
-# Configuração do Dockerfile com Hardening (Módulo 5)
-# Objetivo: Garantir que a aplicação rode em um container seguro, sem privilégios de root,
-# utilizando multi-stage build e servidor WSGI (Gunicorn) para produção.
-# ==============================================================================
+# Dockerfile HARDENED - corrige as seis falhas do Dockerfile original.
 
-# STAGE 1: Build - Instala dependências em um estágio separado
-FROM python:3.12-slim AS build
+# CORRIGIDO (FALHA 1): tag fixada e imagem minima (alpine: menos pacotes de
+# SO, menos CVEs), em vez de "latest". Build multi-stage: o estagio final
+# nao carrega cache nem ferramentas de instalacao.
+FROM python:3.12-alpine AS build
 
 WORKDIR /app
+
 COPY requirements.txt .
+
+# CORRIGIDO (FALHA 3): versoes fixadas no requirements.txt (auditadas pelo
+# pip-audit no sca.yml) e --no-cache-dir para nao deixar cache na camada.
 RUN pip install --no-cache-dir -r requirements.txt
 
-# STAGE 2: Runtime - Imagem final mínima
-FROM python:3.12-slim AS runtime
+FROM python:3.12-alpine AS runtime
 
-# Copia somente os pacotes Python já instalados do estágio de build
+# Banco aponta para /app/data: unica pasta gravavel (volume no docker run).
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOME=/tmp \
+    TASKFLOW_DATABASE=/app/data/taskflow.db \
+    TASKFLOW_LOG_FILE=/app/logs/taskflow.log
+
 COPY --from=build /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=build /usr/local/bin /usr/local/bin
 
 WORKDIR /app
 
-# Cria um usuário e grupo dedicados, além da pasta de logs com as permissões do usuário não-root
-RUN groupadd --system taskflow && \
-    useradd --system --gid taskflow --home-dir /app --shell /usr/sbin/nologin taskflow && \
-    mkdir -p /app/logs && \
-    chown -R taskflow:taskflow /app
+# CORRIGIDO (FALHA 2): usuario e grupo dedicados, sem privilegios de root.
+# So a pasta data/ (banco SQLite) e gravavel por ele.
+RUN addgroup -S taskflow && \
+    adduser -S -G taskflow -H -s /sbin/nologin taskflow && \
+    mkdir -p /app/data /app/logs && \
+    chown taskflow:taskflow /app/data /app/logs
 
-# Copia o código da aplicação garantindo que o usuário não-root seja o dono
-COPY --chown=taskflow:taskflow . .
+# Copia SO o necessario; arquivos ficam do root (somente leitura p/ app).
+# static/ guarda o CSS externo exigido pela CSP (sem estilos inline).
+COPY app.py .
+COPY templates/ templates/
+COPY static/ static/
 
-# Expõe a porta 5000 apenas como documentação
+# CORRIGIDO (FALHA 4): nenhum segredo em ENV/ARG. TASKFLOW_SECRET_KEY e
+# TASKFLOW_ADMIN_PASSWORD sao injetadas em tempo de execucao (docker run -e).
+
+# CORRIGIDO (FALHA 5): EXPOSE apenas documenta a porta do gunicorn.
 EXPOSE 5000
 
-# Define o usuário não-root efetivo a partir daqui
 USER taskflow
 
-# Inicializa o banco de dados e sobe a aplicação utilizando o Gunicorn (WSGI de produção)
-CMD ["sh", "-c", "python -c 'from app import app, init_db; app.app_context().push(); init_db()' && gunicorn --bind 0.0.0.0:5000 --workers 2 app:app"]
-
-# ==============================================================================
-# Resumo: Este Dockerfile implementa as correções de Hardening exigidas. A técnica de
-# multi-stage build reduz a superfície de ataque removendo ferramentas de compilação.
-# A criação do usuário 'taskflow' impede a execução como root (FALHA 2), e o uso do
-# Gunicorn substitui o servidor vulnerável de desenvolvimento do Flask (FALHA 6).
-# ==============================================================================
+# CORRIGIDO (FALHA 6): gunicorn (WSGI de producao) no lugar de "python app.py".
+# Sem debug: o bloco __main__ do app.py nao e executado.
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "app:app"]

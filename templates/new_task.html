@@ -1,28 +1,38 @@
-<!--
-    Template Jinja2 - Formulario de nova tarefa do TaskFlow.
-
-    Este template nao tem dados dinamicos vindos do usuario para exibir
-    (e apenas um formulario), mas segue o mesmo padrao dos demais por
-    consistencia: qualquer valor futuro adicionado aqui (por exemplo, um
-    campo pre-preenchido para edicao de tarefa) ja nasce protegido pelo
-    autoescape do Jinja2, sem que o desenvolvedor precise lembrar de
-    escapar manualmente.
--->
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <title>TaskFlow - Nova tarefa</title>
+    {# CSS em arquivo externo: a CSP (default-src 'self') bloqueia estilos inline. #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <h1>Nova tarefa</h1>
 
-    <form method="post">
-        Titulo: <input type="text" name="title"><br>
-        Descricao: <textarea name="description"></textarea><br>
-        <input type="submit" value="Salvar">
+    {#
+      Resumo das mudancas (comentario Jinja2: removido no servidor, nao chega ao navegador):
+      - ANTES: formulario devolvido como string HTML direto do app.py.
+        AGORA: template dedicado, renderizado com render_template (autoescape).
+      - required/maxlength: validacao no CLIENTE, apenas usabilidade e defesa em
+        profundidade. Nao e controle de seguranca: um atacante envia o POST
+        direto (curl) e ignora esses atributos. A protecao contra XSS esta na
+        SAIDA (autoescape no tasks.html).
+      - url_for(): rota gerada pelo Flask, sem caminho fixo no HTML.
+    #}
+    <form method="post" action="{{ url_for('new_task') }}">
+        <div>
+            <label for="title">Título:</label>
+            <input type="text" id="title" name="title" required maxlength="200">
+        </div>
+        <br>
+        <div>
+            <label for="description">Descrição:</label>
+            <textarea id="description" name="description" maxlength="2000"></textarea>
+        </div>
+        <br>
+        <button type="submit">Salvar</button>
     </form>
 
-    <a href="{{ url_for('tasks') }}">Voltar para minhas tarefas</a>
+    <a href="{{ url_for('tasks') }}">Voltar</a>
 </body>
-</html>v
+</html>

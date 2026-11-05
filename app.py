@@ -406,4 +406,4 @@ if __name__ == "__main__":
     #        Porta 5001 para evitar conflito com o AirPlay do macOS (porta 5000).
     #        Em producao/container a app roda com gunicorn (ver Dockerfile).
     debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() in ("1", "true", "yes")
-    app.run(host="127.0.0.1", port=5001, debug=debug_mode)v
+    app.run(host="127.0.0.1", port=5001, debug=debug_mode)

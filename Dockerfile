@@ -1,53 +1,81 @@
-# Dockerfile HARDENED - corrige as seis falhas do Dockerfile original.
+# =============================================================================
+# CI - TaskFlow
+# Esteira basica: instala dependencias e roda lint em todo PR para a main.
+# O job "Build e Lint" e um required status check: se falhar, o merge e bloqueado.
+# =============================================================================
 
-# CORRIGIDO (FALHA 1): tag fixada e imagem minima (alpine: menos pacotes de
-# SO, menos CVEs), em vez de "latest". Build multi-stage: o estagio final
-# nao carrega cache nem ferramentas de instalacao.
-FROM python:3.12-alpine AS build
+name: CI - TaskFlow
 
-WORKDIR /app
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: # permite rodar manualmente pela aba Actions
 
-COPY requirements.txt .
+# ANTES: sem "permissions" -> o GITHUB_TOKEN recebia as permissoes padrao (amplas).
+# AGORA: minimo privilegio. O job so precisa ler o codigo.
+permissions:
+  contents: read
 
-# CORRIGIDO (FALHA 3): versoes fixadas no requirements.txt (auditadas pelo
-# pip-audit no sca.yml) e --no-cache-dir para nao deixar cache na camada.
-RUN pip install --no-cache-dir -r requirements.txt
+# ANTES: versao do Python fixa no meio do step ("3.10") e diferente em cada workflow.
+# AGORA: versoes centralizadas em env (boa pratica de Pipeline as Code).
+#         3.12 = mesma versao da imagem do Dockerfile, CI testa o que vai para producao.
+env:
+  PYTHON_VERSION: "3.12"
+  RUFF_VERSION: "0.6.9"
 
-FROM python:3.12-alpine AS runtime
+jobs:
+  build-e-lint:
+    # Nome exibido no PR e usado na branch protection (required check).
+    name: Build e Lint
+    runs-on: ubuntu-latest
+    steps:
+      # ANTES: actions/checkout@v4 (tag mutavel, pode ser movida para codigo malicioso).
+      # AGORA: pin pelo SHA do commit (imutavel). O comentario indica a versao
+      #         e permite que o Dependabot atualize o pin.
+      - name: Checkout do codigo
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-# Banco aponta para /app/data: unica pasta gravavel (volume no docker run).
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    HOME=/tmp \
-    TASKFLOW_DATABASE=/app/data/taskflow.db \
-    TASKFLOW_LOG_FILE=/app/logs/taskflow.log
+      # ANTES: actions/setup-python@v5 (tag mutavel).
+      # AGORA: pin por SHA + cache do pip para acelerar as execucoes.
+      - name: Configurar Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
-COPY --from=build /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=build /usr/local/bin /usr/local/bin
+      # AGORA: ruff instalado com versao fixa (build reprodutivel).
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install "ruff==${{ env.RUFF_VERSION }}"
 
-WORKDIR /app
+      # ANTES: "python -m py_compile app.py" -> so checava sintaxe
+      #         (nao pegou, por exemplo, o "import os" que faltava).
+      # AGORA: ruff (exigido pela atividade) -> detecta imports faltando,
+      #         nomes indefinidos e codigo morto. Se falhar, o PR fica vermelho.
+      - name: Lint com ruff
+        run: ruff check .
 
-# CORRIGIDO (FALHA 2): usuario e grupo dedicados, sem privilegios de root.
-# So a pasta data/ (banco SQLite) e gravavel por ele.
-RUN addgroup -S taskflow && \
-    adduser -S -G taskflow -H -s /sbin/nologin taskflow && \
-    mkdir -p /app/data /app/logs && \
-    chown taskflow:taskflow /app/data /app/logs
 
-# Copia SO o necessario; arquivos ficam do root (somente leitura p/ app).
-# static/ guarda o CSS externo exigido pela CSP (sem estilos inline).
-COPY app.py .
-COPY templates/ templates/
-COPY static/ static/
+# Inclusão do permissions: contents: read
+# - O que mudou: Restringiu o token de execução do GitHub (GITHUB_TOKEN) apenas para leitura de código.
+# - Por quê: Aplica o princípio de mínimo privilégio para evitar que, em caso de comprometimento do pipeline, um atacante consiga alterar arquivos no repositório.
 
-# CORRIGIDO (FALHA 4): nenhum segredo em ENV/ARG. TASKFLOW_SECRET_KEY e
-# TASKFLOW_ADMIN_PASSWORD sao injetadas em tempo de execucao (docker run -e).
+# Centralização das versões em env (PYTHON_VERSION e RUFF_VERSION)
+# - O que mudou: As versões foram definidas como variáveis globais no topo do arquivo em vez de ficarem espalhadas nos steps.
+# - Por quê: Garante padronização e reprodutibilidade, alinhando a versão do Python no CI (3.12) com a mesma utilizada no Dockerfile e facilitando manutenções futuras.
 
-# CORRIGIDO (FALHA 5): EXPOSE apenas documenta a porta do gunicorn.
-EXPOSE 5000
+# Fixação das Actions por Commit SHA (actions/checkout e actions/setup-python)
+# - O que mudou: Substituiu as tags mutáveis (ex: @v4, @v5) pelo hash SHA exato do commit (ex: @11d5960...).
+# - Por quê: Protege a esteira contra ataques na cadeia de suprimentos (Supply Chain Attacks), garantindo que o código da action não seja alterado de forma maliciosa na origem.
 
-USER taskflow
+# Adição do Cache do Pip (cache: pip)
+# - O que mudou: Ativou a opção de cache na action do Python.
+# - Por quê: Reutiliza os pacotes instalados em execuções anteriores, acelerando o tempo de execução da esteira.
 
-# CORRIGIDO (FALHA 6): gunicorn (WSGI de producao) no lugar de "python app.py".
-# Sem debug: o bloco __main__ do app.py nao e executado.
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "app:app"]
+# Substituição do py_compile pelo ruff check .
+# - O que mudou: Substituiu a simples checagem de sintaxe do Python pelo analisador estático (linter) Ruff com versão fixada (0.6.9).
+# - Por quê: Cria um quality gate efetivo, capaz de detectar variáveis não utilizadas, erro de pacotes faltantes (ex: import os), nomes indefinidos e más práticas que o compilador padrão deixava passar.
